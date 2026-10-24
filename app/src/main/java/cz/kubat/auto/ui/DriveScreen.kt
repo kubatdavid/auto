@@ -77,12 +77,31 @@ object Palette {
 
 data class Place(val name: String, val location: String, val lat: Double, val lon: Double)
 
+private const val DROPPED_PIN = "Dropped pin"
+
+private suspend fun reverseGeocode(lat: Double, lon: Double, key: String): Place? = withContext(Dispatchers.IO) {
+    val url = "https://api.mapy.com/v1/rgeocode?lon=$lon&lat=$lat&lang=cs&apikey=$key"
+    val item = JSONObject(URL(url).readText()).optJSONArray("items")?.optJSONObject(0) ?: return@withContext null
+    Place(item.optString("name", DROPPED_PIN), item.optString("location"), lat, lon)
+}
+
 @Composable
 fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
     val app = App.instance
     val compact = LocalConfiguration.current.screenHeightDp < 520 // split-screen with the navigation app
     var destination by remember { mutableStateOf<Place?>(null) }
     val position = rememberPosition()
+    // Name a dropped pin by its street address (Mapy.com reverse geocoding)
+    LaunchedEffect(destination) {
+        val d = destination ?: return@LaunchedEffect
+        if (d.name != DROPPED_PIN || app.settings.mapyKey.isEmpty()) return@LaunchedEffect
+        val named = try {
+            reverseGeocode(d.lat, d.lon, app.settings.mapyKey)
+        } catch (e: Exception) {
+            null
+        }
+        if (named != null && destination == d) destination = named
+    }
     val lat = live.lat ?: position?.first
     val lon = live.lon ?: position?.second
 
@@ -100,6 +119,10 @@ fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
                 MapPane(
                     mapyKey = app.settings.mapyKey, lat = lat, lon = lon, track = live.track,
                     destination = destination?.let { it.lat to it.lon }, modifier = Modifier.fillMaxSize(),
+                    onLongPress = { la, lo ->
+                        destination = Place(DROPPED_PIN, "%.5f, %.5f".format(java.util.Locale.US, la, lo), la, lo)
+                        AppLog.i("Map: pin dropped at $la, $lo")
+                    },
                 )
                 SearchBox(lat, lon, destination, onPick = { destination = it }, modifier = Modifier.align(Alignment.TopCenter))
             }
@@ -250,7 +273,7 @@ private fun SearchBox(lat: Double?, lon: Double?, destination: Place?, onPick: (
         if (destination == null) {
             TextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
-                placeholder = { Text("Search destination (mapy.com)") },
+                placeholder = { Text("Search, or long-press the map") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 colors = TextFieldDefaults.colors(focusedContainerColor = Palette.panel, unfocusedContainerColor = Palette.panel),
                 modifier = Modifier.fillMaxWidth(),

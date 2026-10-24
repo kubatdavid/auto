@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,7 +65,9 @@ fun MapPane(
     track: List<Pair<Double, Double>>,
     destination: Pair<Double, Double>?,
     modifier: Modifier = Modifier,
+    onLongPress: (Double, Double) -> Unit = { _, _ -> },
 ) {
+    val longPress by rememberUpdatedState(onLongPress)
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember {
@@ -100,6 +103,10 @@ fun MapPane(
                 mv.getMapAsync { m ->
                     m.cameraPosition = CameraPosition.Builder().target(LatLng(49.8, 15.5)).zoom(7.0).build()
                     m.uiSettings.isRotateGesturesEnabled = false
+                    m.addOnMapLongClickListener { p ->
+                        longPress(p.latitude, p.longitude)
+                        true
+                    }
                     m.addOnCameraMoveStartedListener { reason ->
                         if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) follow = false
                     }
