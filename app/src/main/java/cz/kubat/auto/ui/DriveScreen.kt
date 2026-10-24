@@ -1,8 +1,15 @@
 package cz.kubat.auto.ui
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.location.LocationListener
+import android.location.LocationManager
 import android.net.Uri
+import android.os.Looper
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cz.kubat.auto.App
+import cz.kubat.auto.data.AppLog
 import cz.kubat.auto.record.Link
 import cz.kubat.auto.record.Live
 import kotlinx.coroutines.Dispatchers
@@ -73,6 +82,9 @@ fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
     val app = App.instance
     val compact = LocalConfiguration.current.screenHeightDp < 520 // split-screen with the navigation app
     var destination by remember { mutableStateOf<Place?>(null) }
+    val position = rememberPosition()
+    val lat = live.lat ?: position?.first
+    val lon = live.lon ?: position?.second
 
     Column(Modifier.fillMaxSize().background(Palette.bg)) {
         for (a in live.alerts) {
@@ -86,10 +98,10 @@ fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
         if (!compact) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp)) {
                 MapPane(
-                    mapyKey = app.settings.mapyKey, lat = live.lat, lon = live.lon, track = live.track,
+                    mapyKey = app.settings.mapyKey, lat = lat, lon = lon, track = live.track,
                     destination = destination?.let { it.lat to it.lon }, modifier = Modifier.fillMaxSize(),
                 )
-                SearchBox(live, destination, onPick = { destination = it }, modifier = Modifier.align(Alignment.TopCenter))
+                SearchBox(lat, lon, destination, onPick = { destination = it }, modifier = Modifier.align(Alignment.TopCenter))
             }
             TripStrip(live, app.settings.fuelPrice)
         }
@@ -216,7 +228,7 @@ private fun Chips(live: Live) {
 }
 
 @Composable
-private fun SearchBox(live: Live, destination: Place?, onPick: (Place?) -> Unit, modifier: Modifier) {
+private fun SearchBox(lat: Double?, lon: Double?, destination: Place?, onPick: (Place?) -> Unit, modifier: Modifier) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Place>>(emptyList()) }
@@ -228,7 +240,7 @@ private fun SearchBox(live: Live, destination: Place?, onPick: (Place?) -> Unit,
         }
         delay(350) // debounce typing
         results = try {
-            suggest(query, key, live.lat, live.lon)
+            suggest(query, key, lat, lon)
         } catch (e: Exception) {
             emptyList()
         }
@@ -272,12 +284,51 @@ private fun SearchBox(live: Live, destination: Place?, onPick: (Place?) -> Unit,
     }
 }
 
-/** Opens Waze; with the app in split-screen it lands in the other half (FLAG_ACTIVITY_LAUNCH_ADJACENT). */
+/** Opens the Waze app; with this app in split-screen it lands in the other half (FLAG_ACTIVITY_LAUNCH_ADJACENT). */
 fun openWaze(context: Context, p: Place) {
-    val uri = Uri.parse("https://waze.com/ul?ll=${p.lat},${p.lon}&navigate=yes")
-    context.startActivity(
-        Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NEW_TASK)
-    )
+    val flags = Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NEW_TASK
+    val waze = Intent(Intent.ACTION_VIEW, Uri.parse("waze://?ll=${p.lat},${p.lon}&navigate=yes")).setPackage("com.waze").addFlags(flags)
+    try {
+        context.startActivity(waze)
+        AppLog.i("Waze: navigating to ${p.name} (${p.lat}, ${p.lon})")
+    } catch (e: ActivityNotFoundException) {
+        AppLog.w("Waze app not found, falling back to geo: intent")
+        Toast.makeText(context, "Waze is not installed — opening another map app", Toast.LENGTH_LONG).show()
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}")).addFlags(flags))
+        } catch (e2: ActivityNotFoundException) {
+            AppLog.e("No navigation app installed", e2)
+        }
+    }
+}
+
+/** Device position for the map, independent of the recorder (GPS + fused provider when available). */
+@SuppressLint("MissingPermission")
+@Composable
+private fun rememberPosition(): Pair<Double, Double>? {
+    val context = LocalContext.current
+    var pos by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    DisposableEffect(Unit) {
+        val lm = context.getSystemService(LocationManager::class.java)
+        val listener = LocationListener { pos = it.latitude to it.longitude }
+        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .filter { it in lm.allProviders }
+        if (hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)) {
+            providers.mapNotNull { lm.getLastKnownLocation(it) }.maxByOrNull { it.time }?.let { pos = it.latitude to it.longitude }
+            for (p in providers) {
+                try {
+                    lm.requestLocationUpdates(p, 1000L, 0f, listener, Looper.getMainLooper())
+                } catch (e: Exception) {
+                    AppLog.w("Location provider $p unavailable: ${e.message}")
+                }
+            }
+            AppLog.i("Map location providers: $providers, enabled: ${providers.filter { lm.isProviderEnabled(it) }}")
+        } else {
+            AppLog.w("Map: no location permission")
+        }
+        onDispose { lm.removeUpdates(listener) }
+    }
+    return pos
 }
 
 private suspend fun suggest(query: String, key: String, lat: Double?, lon: Double?): List<Place> = withContext(Dispatchers.IO) {

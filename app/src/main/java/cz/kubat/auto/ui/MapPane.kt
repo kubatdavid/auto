@@ -145,6 +145,7 @@ fun MapPane(
                 )
             )
             style = s
+            cz.kubat.auto.data.AppLog.i("Map: Mapy.com style loaded")
         }
     }
 
