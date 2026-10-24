@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +54,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cz.kubat.auto.App
 import cz.kubat.auto.BuildConfigInfo
 import cz.kubat.auto.data.AppLog
+import cz.kubat.auto.record.Link
+import cz.kubat.auto.record.RecorderService
 import cz.kubat.auto.sync.Api
 import cz.kubat.auto.sync.SyncWorker
 import kotlinx.coroutines.Dispatchers
@@ -183,6 +186,30 @@ fun SettingsScreen() {
                     AppLog.i("Adapter selected: ${deviceLabel(d)}")
                 })
                 Text(deviceLabel(d), color = Palette.text)
+            }
+        }
+        // Connection state + connect/disconnect (same as Start/Stop on the Drive tab)
+        val live by App.instance.live.state.collectAsStateWithLifecycle()
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            val color = when (live.link) {
+                Link.LIVE -> Palette.ok
+                Link.CONNECTING, Link.WAITING -> Palette.warm
+                Link.STOPPED -> Palette.muted
+            }
+            androidx.compose.foundation.layout.Box(
+                Modifier.padding(end = 8.dp).size(10.dp).background(color, androidx.compose.foundation.shape.CircleShape)
+            )
+            Text(live.status, color = Palette.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            if (live.link == Link.STOPPED) {
+                Button(enabled = canConnect && adapter.isNotEmpty(), onClick = {
+                    AppLog.i("Connect pressed (Settings)")
+                    RecorderService.start(context)
+                }) { Text("Connect") }
+            } else {
+                OutlinedButton(onClick = {
+                    AppLog.i("Disconnect pressed (Settings)")
+                    RecorderService.stop(context)
+                }) { Text("Disconnect", color = Palette.text) }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

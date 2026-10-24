@@ -262,7 +262,11 @@ class RecorderService : Service() {
         }
     }
 
+    private var lastStatus = ""
+
     private fun publish(link: Link, status: String) {
+        if (status != lastStatus) AppLog.i("Status: $status")
+        lastStatus = status
         app.live.update { it.copy(link = link, status = status) }
         getSystemService(android.app.NotificationManager::class.java).notify(NOTIFICATION_ID, notification(status))
     }

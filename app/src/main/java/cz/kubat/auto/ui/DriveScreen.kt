@@ -145,10 +145,10 @@ private fun StatusBar(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
         Text(live.status, color = Palette.muted, fontSize = 13.sp, maxLines = 1, modifier = Modifier.weight(1f))
         if (live.link == Link.STOPPED) {
             Button(onClick = onStart, colors = ButtonDefaults.buttonColors(containerColor = Palette.ok)) {
-                Text("Start", color = Color(0xFF08130C))
+                Text("Connect", color = Color(0xFF08130C))
             }
         } else {
-            OutlinedButton(onClick = onStop) { Text("Stop", color = Palette.text) }
+            OutlinedButton(onClick = onStop) { Text("Disconnect", color = Palette.text) }
         }
     }
 }
