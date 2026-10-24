@@ -260,7 +260,10 @@ fun SettingsScreen() {
                 }
             }) { Text("Save & test") }
             Spacer(Modifier.padding(4.dp))
-            OutlinedButton(onClick = { SyncWorker.runNow(context); result = "Sync queued (also uploads the log)" }) {
+            OutlinedButton(onClick = {
+                result = "Syncing…"
+                scope.launch { result = SyncWorker.syncOnce(App.instance).message }
+            }) {
                 Text("Sync now", color = Palette.text)
             }
         }
