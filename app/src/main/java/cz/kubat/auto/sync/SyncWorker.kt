@@ -76,6 +76,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     data class Outcome(val ok: Boolean, val retry: Boolean, val message: String)
 
     companion object {
+        private const val BATCH = 2000
+        private val NETWORK = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         private val lock = Mutex()
 
         /** One full sync pass (logs + trips). Used by the worker and the "Sync now" button. */
