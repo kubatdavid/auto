@@ -15,6 +15,8 @@ data class Live(
     val values: Map<String, Double?> = emptyMap(),
     val lat: Double? = null,
     val lon: Double? = null,
+    val gpsSpeed: Double? = null,
+    val altitude: Double? = null,
     val codes: Codes? = null,
     val tripUuid: String? = null,
     val tripStartedAt: Double? = null,

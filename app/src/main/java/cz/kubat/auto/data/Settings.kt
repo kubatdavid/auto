@@ -26,7 +26,18 @@ class Settings(context: Context) {
         get() = prefs.getFloat("fuel_price", 38f).toDouble()
         set(v) = prefs.edit().putFloat("fuel_price", v.toFloat()).apply()
 
+    /** Sensor keys shown as big tiles on the Drive tab, in order. */
+    var driveSensors: List<String>
+        get() = (prefs.getString("drive_sensors", null) ?: DEFAULT_DRIVE_SENSORS).split(',').filter { it.isNotBlank() }
+        set(v) = prefs.edit().putString("drive_sensors", v.joinToString(",")).apply()
+
+    /** Saved destinations as a JSON array of {name, location, lat, lon}. */
+    var placesJson: String
+        get() = prefs.getString("places", "[]") ?: "[]"
+        set(v) = prefs.edit().putString("places", v).apply()
+
     companion object {
+        const val DEFAULT_DRIVE_SENSORS = "speed,rpm,consumption,coolant"
         const val DEFAULT_SERVER = "https://auto.abhishekam.cz"
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -81,7 +82,8 @@ class MainActivity : ComponentActivity() {
                         NavigationBar(containerColor = Palette.panel) {
                             NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Filled.Home, null) }, label = { Text("Drive") })
                             NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Filled.DateRange, null) }, label = { Text("Trips") })
-                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Filled.Settings, null) }, label = { Text("Settings") })
+                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Filled.Build, null) }, label = { Text("Sensors") })
+                            NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Filled.Settings, null) }, label = { Text("Settings") })
                         }
                     },
                 ) { padding ->
@@ -96,6 +98,7 @@ class MainActivity : ComponentActivity() {
                                 onStop = { RecorderService.stop(this@MainActivity) },
                             )
                             1 -> TripsScreen()
+                            2 -> SensorsScreen(live)
                             else -> SettingsScreen()
                         }
                     }

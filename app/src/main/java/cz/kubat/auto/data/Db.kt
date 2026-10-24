@@ -164,6 +164,14 @@ class Db(context: Context) : SQLiteOpenHelper(context, "auto.db", null, 2) {
         writableDatabase.execSQL("UPDATE trip SET synced_seq = ? WHERE uuid = ?", arrayOf<Any>(seq, uuid))
     }
 
+    fun sampleJson(uuid: String): List<JSONObject> =
+        readableDatabase.rawQuery("SELECT json FROM sample WHERE trip_uuid = ? ORDER BY seq", arrayOf(uuid))
+            .use { c -> buildList { while (c.moveToNext()) add(JSONObject(c.getString(0))) } }
+
+    fun latestDtc(uuid: String): JSONObject? =
+        readableDatabase.rawQuery("SELECT json FROM dtc WHERE trip_uuid = ? ORDER BY t DESC LIMIT 1", arrayOf(uuid))
+            .use { c -> if (c.moveToFirst()) JSONObject(c.getString(0)) else null }
+
     /** Track (lat, lon) of a trip for the map. */
     fun track(uuid: String): List<Pair<Double, Double>> =
         readableDatabase.rawQuery("SELECT json FROM sample WHERE trip_uuid = ? ORDER BY seq", arrayOf(uuid)).use { c ->

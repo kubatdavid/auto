@@ -19,13 +19,14 @@ object Pids {
         "0110" to Pid("maf") { (u(it, 0) * 256 + u(it, 1)) / 100.0 },
         "0111" to Pid("throttle") { u(it, 0) * 100.0 / 255 },
         "0115" to Pid("o2_down") { u(it, 0) / 200.0 }, // O2 bank 1 sensor 2 (after catalyst), volts
+        "0121" to Pid("dist_mil") { (u(it, 0) * 256 + u(it, 1)).toDouble() }, // km driven with check-engine light on
     )
 
     /** Every cycle: needed for distance and fuel integration. */
     val FAST = listOf("010D", "010C", "0110", "0111")
 
     /** Rotated, [SLOW_PER_CYCLE] per cycle. */
-    val SLOW = listOf("0105", "0104", "0106", "0107", "0103", "010F", "010E", "0115")
+    val SLOW = listOf("0105", "0104", "0106", "0107", "0103", "010F", "010E", "0115", "0121")
     const val SLOW_PER_CYCLE = 2
 
     private const val AFR = 14.7 // stoichiometric, petrol

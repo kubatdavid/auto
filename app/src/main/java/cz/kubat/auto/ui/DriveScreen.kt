@@ -29,6 +29,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -90,6 +93,8 @@ fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
     val app = App.instance
     val compact = LocalConfiguration.current.screenHeightDp < 520 // split-screen with the navigation app
     var destination by remember { mutableStateOf<Place?>(null) }
+    var places by remember { mutableStateOf(loadPlaces()) }
+    val context = LocalContext.current
     val position = rememberPosition()
     // Name a dropped pin by its street address (Mapy.com reverse geocoding)
     LaunchedEffect(destination) {
@@ -124,7 +129,20 @@ fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
                         AppLog.i("Map: pin dropped at $la, $lo")
                     },
                 )
-                SearchBox(lat, lon, destination, onPick = { destination = it }, modifier = Modifier.align(Alignment.TopCenter))
+                PlacesColumn(
+                    places, onPick = { destination = it; AppLog.i("Place picked: ${it.name}") },
+                    onRemove = { p ->
+                        places = places - p; savePlaces(places)
+                        Toast.makeText(context, "Removed ${p.name}", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.align(Alignment.TopEnd),
+                )
+                SearchBox(
+                    lat, lon, destination, onPick = { destination = it },
+                    saved = destination != null && places.any { it.lat == destination!!.lat && it.lon == destination!!.lon },
+                    onSave = { d -> places = places + d; savePlaces(places); AppLog.i("Place saved: ${d.name}") },
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
             TripStrip(live, app.settings.fuelPrice)
         }
@@ -155,39 +173,64 @@ private fun StatusBar(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
 
 @Composable
 private fun BigValues(live: Live) {
-    val v = live.values
-    val speed = v["speed"]
-    val lph = live.instantLph
-    val (consumption, consumptionUnit) = when {
-        lph == null -> "–" to "L/100 km"
-        (speed ?: 0.0) >= 5 -> "%.1f".format(minOf(99.0, lph / speed!! * 100)) to "L/100 km"
-        else -> "%.1f".format(lph) to "L/h"
-    }
-    val coolant = v["coolant"]
-    val coolantColor = when {
-        coolant == null -> Palette.text
-        coolant < 70 -> Palette.cold
-        coolant < 85 -> Palette.warm
-        coolant <= 105 -> Palette.ok
-        else -> Palette.hot
+    val sensors = App.instance.settings.driveSensors.mapNotNull { SENSOR_BY_KEY[it] }
+    if (sensors.isEmpty()) return
+    val size = when {
+        sensors.size <= 4 -> 52.sp
+        sensors.size <= 6 -> 40.sp
+        else -> 30.sp
     }
     Column(Modifier.padding(horizontal = 8.dp)) {
-        Row {
-            Big(speed?.toInt()?.toString() ?: "–", "km/h", Modifier.weight(1f))
-            Big(v["rpm"]?.toInt()?.toString() ?: "–", "rpm", Modifier.weight(1f))
-        }
-        Row {
-            Big(consumption, consumptionUnit, Modifier.weight(1f))
-            Big(coolant?.toInt()?.toString() ?: "–", "°C coolant", Modifier.weight(1f), coolantColor)
+        for (row in sensors.chunked(2)) {
+            Row {
+                for (s in row) {
+                    val v = s.value(live)
+                    Big(v?.let(s.format) ?: "–", if (s.unit.isEmpty()) s.label else "${s.unit} · ${s.label}", Modifier.weight(1f),
+                        v?.let(s.color) ?: Palette.text, size)
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
         }
     }
 }
 
 @Composable
-private fun Big(value: String, unit: String, modifier: Modifier, color: Color = Palette.text) {
+private fun Big(value: String, unit: String, modifier: Modifier, color: Color = Palette.text, size: androidx.compose.ui.unit.TextUnit = 52.sp) {
     Column(modifier.padding(4.dp).background(Palette.panel, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Text(value, color = color, fontSize = 52.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Text(unit, color = Palette.muted, fontSize = 13.sp)
+        Text(value, color = color, fontSize = size, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(unit, color = Palette.muted, fontSize = 12.sp, maxLines = 1)
+    }
+}
+
+// ---------------------------------------------------------------- saved places
+fun loadPlaces(): List<Place> {
+    val arr = org.json.JSONArray(App.instance.settings.placesJson)
+    return (0 until arr.length()).map { i ->
+        val o = arr.getJSONObject(i)
+        Place(o.getString("name"), o.optString("location"), o.getDouble("lat"), o.getDouble("lon"))
+    }
+}
+
+fun savePlaces(places: List<Place>) {
+    val arr = org.json.JSONArray()
+    for (p in places) arr.put(JSONObject().put("name", p.name).put("location", p.location).put("lat", p.lat).put("lon", p.lon))
+    App.instance.settings.placesJson = arr.toString()
+}
+
+/** Saved destinations on the right edge of the map: tap = set destination, long-press = remove. */
+@Composable
+private fun PlacesColumn(places: List<Place>, onPick: (Place) -> Unit, onRemove: (Place) -> Unit, modifier: Modifier) {
+    if (places.isEmpty()) return
+    Column(modifier.padding(top = 72.dp, end = 8.dp).width(132.dp)) {
+        for (p in places) {
+            Text(
+                p.name, color = Palette.text, fontSize = 14.sp, maxLines = 2,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                    .background(Color(0xE6171B22), RoundedCornerShape(10.dp))
+                    .pointerInput(p) { detectTapGestures(onTap = { onPick(p) }, onLongPress = { onRemove(p) }) }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            )
+        }
     }
 }
 
@@ -251,7 +294,10 @@ private fun Chips(live: Live) {
 }
 
 @Composable
-private fun SearchBox(lat: Double?, lon: Double?, destination: Place?, onPick: (Place?) -> Unit, modifier: Modifier) {
+private fun SearchBox(
+    lat: Double?, lon: Double?, destination: Place?, onPick: (Place?) -> Unit,
+    saved: Boolean, onSave: (Place) -> Unit, modifier: Modifier,
+) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Place>>(emptyList()) }
@@ -301,6 +347,9 @@ private fun SearchBox(lat: Double?, lon: Double?, destination: Place?, onPick: (
                     onClick = { openWaze(context, destination) },
                     colors = ButtonDefaults.buttonColors(containerColor = Palette.cold),
                 ) { Text("Navigate (Waze)", color = Color.White) }
+                IconButton(onClick = { if (!saved) onSave(destination) }) {
+                    Icon(Icons.Filled.Star, contentDescription = "Save place", tint = if (saved) Palette.warm else Palette.muted)
+                }
                 IconButton(onClick = { onPick(null) }) { Icon(Icons.Filled.Close, contentDescription = "Clear", tint = Palette.muted) }
             }
         }

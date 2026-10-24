@@ -191,7 +191,9 @@ class RecorderService : Service() {
             app.live.update {
                 it.copy(
                     link = Link.LIVE, status = "Live", values = HashMap(cur), lat = location?.latitude,
-                    lon = location?.longitude, tripUuid = uuid, tripStartedAt = tripStart, tripSeconds = t - tripStart,
+                    lon = location?.longitude,
+                    gpsSpeed = location?.takeIf { l -> l.hasSpeed() }?.let { l -> l.speed * 3.6 },
+                    altitude = location?.takeIf { l -> l.hasAltitude() }?.altitude, tripUuid = uuid, tripStartedAt = tripStart, tripSeconds = t - tripStart,
                     distanceKm = distance, fuelL = fuel, coolantMax = coolantMax, samplesPerSec = sps,
                     instantLph = cur["fuel_lph"], alerts = alerts(cur), track = ArrayList(track),
                 )

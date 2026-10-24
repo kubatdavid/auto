@@ -32,6 +32,7 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -66,6 +67,7 @@ fun MapPane(
     destination: Pair<Double, Double>?,
     modifier: Modifier = Modifier,
     onLongPress: (Double, Double) -> Unit = { _, _ -> },
+    fitTrack: Boolean = false,
 ) {
     val longPress by rememberUpdatedState(onLongPress)
     val context = LocalContext.current
@@ -172,6 +174,10 @@ fun MapPane(
         if (track.size < 2) return@LaunchedEffect
         s.getSourceAs<GeoJsonSource>("track")
             ?.setGeoJson(LineString.fromLngLats(track.map { Point.fromLngLat(it.second, it.first) }))
+        if (fitTrack) {
+            val bounds = LatLngBounds.Builder().includes(track.map { LatLng(it.first, it.second) }).build()
+            map?.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 60))
+        }
     }
 
     LaunchedEffect(style, destination) {
