@@ -32,25 +32,25 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cz.kubat.auto.App
+import cz.kubat.auto.data.AppLog
 import cz.kubat.auto.record.Link
 import cz.kubat.auto.record.RecorderService
 
 class MainActivity : ComponentActivity() {
 
-    private val permissions = arrayOf(
-        Manifest.permission.BLUETOOTH_CONNECT,
-        Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.POST_NOTIFICATIONS,
-    )
+    private val permissions = NEEDED_PERMISSIONS
 
-    private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        startRecording()
+    private var startAfterGrant = false
+    private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
+        AppLog.i("Permissions: " + res.entries.joinToString { "${it.key.substringAfterLast('.')}=${it.value}" })
+        if (startAfterGrant) startRecording()
     }
 
     private fun granted(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
 
     private fun startRecording() {
         if (!granted(Manifest.permission.BLUETOOTH_CONNECT) || !granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            AppLog.w("Start refused: missing Nearby devices or Location permission")
             Toast.makeText(this, "Needs Nearby devices + precise Location permission", Toast.LENGTH_LONG).show()
             return
         }
@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (!permissions.all { granted(it) }) requestPermissions.launch(permissions) // ask once at first launch
         val colors = darkColorScheme(
             primary = Palette.ok, background = Palette.bg, surface = Palette.panel,
             onBackground = Palette.text, onSurface = Palette.text,
@@ -89,7 +90,8 @@ class MainActivity : ComponentActivity() {
                             0 -> DriveScreen(
                                 live,
                                 onStart = {
-                                    if (permissions.all { granted(it) }) startRecording() else requestPermissions.launch(permissions)
+                                    if (permissions.all { granted(it) }) startRecording()
+                                    else { startAfterGrant = true; requestPermissions.launch(permissions) }
                                 },
                                 onStop = { RecorderService.stop(this@MainActivity) },
                             )

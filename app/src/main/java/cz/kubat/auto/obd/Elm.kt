@@ -3,6 +3,7 @@ package cz.kubat.auto.obd
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket
+import cz.kubat.auto.data.AppLog
 import java.io.IOException
 import java.util.UUID
 
@@ -30,15 +31,24 @@ class Elm(private val adapter: BluetoothAdapter, private val address: String) {
     fun connect() {
         val device = adapter.getRemoteDevice(address)
         adapter.cancelDiscovery()
-        val s = device.createRfcommSocketToServiceRecord(SPP)
-        s.connect()
-        socket = s
-        for (c in listOf("ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATSP0", "ATAT2")) cmd(c)
+        AppLog.i("BT: connecting to ${device.name ?: "?"} $address (bond state ${device.bondState})")
+        socket = try {
+            device.createRfcommSocketToServiceRecord(SPP).also { it.connect() }
+        } catch (e: IOException) {
+            AppLog.w("BT: secure SPP connect failed (${e.message}), trying insecure")
+            device.createInsecureRfcommSocketToServiceRecord(SPP).also { it.connect() }
+        }
+        AppLog.i("BT: socket connected")
+        for (c in listOf("ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATSP0", "ATAT2")) {
+            val r = cmd(c)
+            if (c == "ATZ") AppLog.i("ELM: ${r.joinToString(" ")}")
+        }
         val b = rawPid("0100", timeoutMs = 20_000) ?: throw ObdException("ECU not responding (ignition off?)")
         supported = (0 until 32).filter { i -> (b[i / 8].toInt() shr (7 - i % 8)) and 1 == 1 }
             .map { "01%02X".format(it + 1) }.toSet()
         // "010C1" = expect one reply: the adapter answers immediately instead of waiting for its timeout
         suffix = if (rawPid("010C", suffixOverride = "1") != null) "1" else ""
+        AppLog.i("ECU: ${supported.size} PIDs supported, fast-reply suffix ${if (suffix.isEmpty()) "off" else "on"}")
     }
 
     fun close() {

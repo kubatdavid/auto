@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Car Trips</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171b22; --line: #2a303a; --text: #e8ebf0; --muted: #8a93a3;
+    --cold: #4ea1ff; --warm: #f2b134; --ok: #3ccf7a; --hot: #ff5a5a; --info: #8a93a3;
+    --s-coolant: #ff8a3d; --s-iat: #8a93a3; --s-speed: #4ea1ff; --s-rpm: #c58cff; --s-fuel: #f2b134;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .tabs { display: flex; gap: 4px; }
+  button { font: inherit; cursor: pointer; }
+  .tabs button, .ghost { background: none; border: 1px solid var(--line); color: var(--muted); padding: 6px 14px; border-radius: 6px; }
+  .tabs button.on, .ghost.on { color: var(--text); background: var(--panel); border-color: var(--muted); }
+  .status { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--hot); flex: none; }
+  .dot.live { background: var(--ok); }
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+  .hidden { display: none !important; }
+  .grid { display: grid; gap: 12px; margin-bottom: 12px; }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .g5 { grid-template-columns: repeat(5, 1fr); }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; min-width: 0; }
+  .k { color: var(--muted); font-size: 13px; }
+  .v { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+  .v small { font-size: 15px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+  .big .v { font-size: 64px; }
+  .sub { font-size: 13px; color: var(--muted); }
+  .alert { background: var(--hot); color: #fff; font-size: 26px; font-weight: 700; padding: 14px 18px; border-radius: 10px; margin-bottom: 12px; }
+  .alert.warn { background: var(--warm); color: #1a1200; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .chip { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+  .chip .dot { width: 9px; height: 9px; }
+  .sev-ok { background: var(--ok); } .sev-warn { background: var(--warm); } .sev-crit { background: var(--hot); } .sev-info { background: var(--info); } .sev-cold { background: var(--cold); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; }
+  .panel h2 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+  .item { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .item:first-of-type { border-top: 0; }
+  .item .dot { margin-top: 6px; }
+  .item b { font-weight: 600; }
+  .item .sub { margin-top: 2px; }
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 4px; margin-bottom: 12px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); padding: 2px 8px 6px; }
+  .legend i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+  canvas.c { width: 100%; height: 200px; display: block; }
+  canvas.bands { width: 100%; height: 230px; display: block; }
+  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; color: var(--muted); font-size: 14px; }
+  select, input { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; font: inherit; max-width: 100%; }
+  input[type=number] { width: 80px; }
+  details.panel summary { cursor: pointer; font-weight: 600; }
+  .report-head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 10px 0 6px; }
+  .primary { background: var(--ok); color: #08130c; border: 0; padding: 7px 16px; border-radius: 6px; font-weight: 600; }
+  #report { width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; }
+  .note { font-size: 12px; color: var(--muted); margin-top: -4px; margin-bottom: 12px; }
+  @media (max-width: 900px) {
+    .g4, .g5 { grid-template-columns: 1fr 1fr; } .g2 { grid-template-columns: 1fr; }
+    .big .v { font-size: 44px; }
+  }
+
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  .trips { position: sticky; top: 12px; max-height: calc(100vh - 90px); overflow-y: auto; }
+  .trip { padding: 10px 12px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+  .trip:hover { background: var(--line); }
+  .trip.on { border-color: var(--muted); background: var(--line); }
+  .trip .d { font-weight: 600; }
+  .trip .s { font-size: 13px; color: var(--muted); }
+  #map { height: 360px; border-radius: 10px; margin-bottom: 12px; background: var(--panel); }
+  .totals { font-size: 13px; color: var(--muted); padding: 4px 12px 10px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .trips { position: static; max-height: 300px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Car Trips</h1>
+  <span class="status">Audi A4 · read-only data from auto.abhishekam.cz</span>
+</header>
+<main>
+  <div class="layout">
+    <div class="panel trips"><h2>Trips</h2><div class="totals" id="totals"></div><div id="trip-list">loading…</div></div>
+    <section id="hist">
+      <div class="toolbar">
+        <span id="trip-title" style="color:var(--text);font-weight:600"></span>
+        <label>Fuel price <input type="number" id="price" step="0.1" min="0"> Kč/L</label>
+      </div>
+      <div class="grid g4">
+        <div class="tile"><div class="k">Distance</div><div class="v" id="h-dist">–</div></div>
+        <div class="tile"><div class="k">Drive time</div><div class="v" id="h-time">–</div><div class="sub" id="h-moving"></div></div>
+        <div class="tile"><div class="k">Average consumption</div><div class="v" id="h-avg">–</div></div>
+        <div class="tile"><div class="k">Fuel used</div><div class="v" id="h-fuelused">–</div><div class="sub" id="h-cost"></div></div>
+        <div class="tile"><div class="k">Average speed (moving)</div><div class="v" id="h-speed">–</div><div class="sub" id="h-top"></div></div>
+        <div class="tile"><div class="k">Idling</div><div class="v" id="h-idle">–</div><div class="sub" id="h-idlefuel"></div></div>
+        <div class="tile"><div class="k">Coolant</div><div class="v" id="h-cool">–</div><div class="sub" id="h-coolsub"></div></div>
+        <div class="tile"><div class="k">Eco score</div><div class="v" id="h-eco">–</div></div>
+      </div>
+      <div class="note">Consumption is estimated from the airflow sensor (±10 %).</div>
+      <div id="map" class="hidden"></div>
+      <div class="grid g2">
+        <div class="panel"><h2>Health check</h2><div id="h-health"></div></div>
+        <div class="panel"><h2>What to improve</h2><div id="h-tips"></div></div>
+      </div>
+      <div class="chart"><div class="legend"><span>Consumption by speed — L/100 km (distance in each band below)</span></div><canvas class="bands" id="h-bands"></canvas></div>
+      <div class="chart"><div class="legend"><span><i style="background:var(--s-speed)"></i>Speed km/h</span><span><i style="background:var(--s-rpm)"></i>RPM ÷ 50</span></div><canvas class="c" id="h-drive"></canvas></div>
+      <div class="chart"><div class="legend"><span><i style="background:var(--s-fuel)"></i>Fuel flow L/h</span></div><canvas class="c" id="h-fuel"></canvas></div>
+      <div class="chart"><div class="legend"><span><i style="background:var(--s-coolant)"></i>Coolant °C</span><span><i style="background:var(--s-iat)"></i>Intake air °C</span><span>dashed = 90 °C</span></div><canvas class="c" id="h-temp"></canvas></div>
+      <details class="panel" id="log-box">
+        <summary>Phone app log</summary>
+        <pre id="applog" style="font-size:12px;white-space:pre-wrap;max-height:420px;overflow:auto;margin:8px 0 0"></pre>
+      </details>
+      <details class="panel" id="report-box">
+        <summary>Mechanic report (image to send)</summary>
+        <div class="report-head"><select id="lang"><option value="cs">Čeština</option><option value="en">English</option></select><button class="primary" id="save-png">Save PNG</button></div>
+        <canvas id="report"></canvas>
+      </details>
+    </section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+const fmtTime = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
+const pct = x => Math.round(x * 100) + " %";
+const signed = x => (x >= 0 ? "+" : "") + x.toFixed(1);
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+const median = a => { const b = [...a].sort((x, y) => x - y); return b[b.length >> 1]; };
+const std = a => { const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
+const price = () => parseFloat($("price").value) || 0;
+const unit = (v, u) => `${v}<small>${u}</small>`;
+
+// ---------------------------------------------------------------- analysis
+const BANDS = [[1, 30], [30, 50], [50, 70], [70, 90], [90, 110], [110, 130], [130, 999]];
+const bandLabel = b => b.hi > 300 ? `${b.lo}+` : `${b.lo}–${b.hi}`;
+const DTC_EN = {
+  P0116: "Engine coolant temperature circuit range/performance", P0117: "Engine coolant temperature circuit low",
+  P0118: "Engine coolant temperature circuit high", P0125: "Insufficient coolant temperature for closed-loop fuel control",
+  P0128: "Coolant thermostat — coolant below regulating temperature", P0171: "System too lean (bank 1)",
+  P0172: "System too rich (bank 1)", P0300: "Random/multiple cylinder misfire", P0420: "Catalyst efficiency below threshold",
+};
+
+function analyze(rows, codes) {
+  if (!rows.length) return null;
+  const s = { duration: rows.at(-1).elapsed - rows[0].elapsed, run: 0, moving: 0, dist: 0, fuel: 0, fuelKnown: 0,
+    idle: 0, idleFuel: 0, cut: 0, accel: 0, brake: 0, hiRpm: 0, lug: 0, olCold: 0,
+    cold: { d: 0, f: 0 }, warm: { d: 0, f: 0 }, bands: BANDS.map(([lo, hi]) => ({ lo, hi, d: 0, f: 0, t: 0 })),
+    cStart: null, cEnd: null, cMax: null, firstWarm: null, vMax: 0,
+    runV: [], offV: [], idleRpm: [], ltft: [], trimIdle: [], trimCruise: [], o2: [], maxMaf: null, maxMafRpm: 0 };
+  let inA = false, inB = false, lastCut = -1e9;
+  for (let i = 0; i < rows.length; i++) {
+    const b = rows[i], running = (b.rpm || 0) > 300;
+    if (b.coolant != null) {
+      if (s.cStart == null) s.cStart = b.coolant;
+      s.cEnd = b.coolant; s.cMax = Math.max(s.cMax ?? -99, b.coolant);
+      if (s.firstWarm == null && b.coolant >= 80) s.firstWarm = b.elapsed - rows[0].elapsed;
+    }
+    if (b.volts != null) (running ? s.runV : s.offV).push(b.volts);
+    if (!i) continue;
+    const a = rows[i - 1], dt = b.elapsed - a.elapsed;
+    if (dt <= 0 || dt > 10 || !running) continue;
+    const v = b.speed || 0, d = v * dt / 3600, f = b.fuel_lph == null ? 0 : b.fuel_lph * dt / 3600;
+    s.run += dt; s.dist += d; s.fuel += f; s.vMax = Math.max(s.vMax, v);
+    if (b.fuel_lph != null) s.fuelKnown += dt;
+    if (v < 1) { s.idle += dt; s.idleFuel += f; if (s.run > 120 && (b.throttle ?? 0) < 6) s.idleRpm.push(b.rpm); }
+    else { s.moving += dt; const k = s.bands.find(x => v >= x.lo && v < x.hi); if (k) { k.d += d; k.f += f; k.t += dt; } }
+    const ce = b.coolant != null && b.coolant < 70 ? s.cold : s.warm; ce.d += d; ce.f += f;
+    if (b.fuel_lph === 0 && v > 10) s.cut += dt;
+    if (b.rpm > 3000 && (b.throttle ?? 0) < 60) s.hiRpm += dt;
+    if (b.rpm < 1300 && (b.load ?? 0) > 85 && v > 15) s.lug += dt;
+    if (b.fuelsys === 1) s.olCold += dt;
+    if (dt <= 3 && a.speed != null && b.speed != null) {
+      const acc = (b.speed - a.speed) / 3.6 / dt;
+      if (acc > 2.5 && !inA) s.accel++; inA = acc > 2.5;
+      if (acc < -3 && !inB) s.brake++; inB = acc < -3;
+    }
+    if (b.fuelsys === 2 && b.stft != null && b.ltft != null) { if (v < 1) s.trimIdle.push(b.stft + b.ltft); else if (v > 40) s.trimCruise.push(b.stft + b.ltft); }
+    if (b.ltft != null) s.ltft.push(b.ltft);
+    if (b.fuel_lph === 0) lastCut = b.elapsed;
+    if (b.fuelsys === 2 && b.o2_down != null && v > 30 && b.elapsed - lastCut > 15) s.o2.push(b.o2_down);
+    if ((b.throttle ?? 0) > 80 && b.rpm > 4500 && b.maf != null && (s.maxMaf == null || b.maf > s.maxMaf)) { s.maxMaf = b.maf; s.maxMafRpm = b.rpm; }
+  }
+  s.hasFuel = s.fuelKnown > 0;
+  s.lp100 = s.hasFuel && s.dist > 0.5 ? s.fuel / s.dist * 100 : null;
+  for (const b of s.bands) b.lp = b.d > 0.3 ? b.f / b.d * 100 : null;
+  const per10 = s.dist > 1 ? 10 / s.dist : 0, mv = Math.max(s.moving, 1), rn = Math.max(s.run, 1);
+  s.eco = s.dist >= 1 ? Math.round(Math.max(0, 100 - Math.min(25, s.accel * per10 * 5) - Math.min(20, s.brake * per10 * 5)
+    - Math.min(20, s.hiRpm / mv * 150) - Math.min(15, s.idle / rn * 50) - Math.min(10, s.lug / 6))) : null;
+  s.findings = health(s, codes); s.tips = tips(s);
+  return s;
+}
+
+const SEV_ORDER = { crit: 0, warn: 1, info: 2, ok: 3 };
+function health(s, codes) {
+  const F = [], add = (sev, title, detail) => F.push({ sev, title, detail });
+  if (codes && codes.stored) {
+    for (const c of codes.stored) add("warn", `Fault code ${c}`, (DTC_EN[c] || "look up this code") + (codes.mil ? " — check-engine light on." : "."));
+    for (const c of codes.pending || []) add("warn", `Pending code ${c}`, (DTC_EN[c] || "look up this code") + " — seen once, not confirmed yet.");
+    if (!codes.stored.length && !(codes.pending || []).length) add("ok", "No fault codes", "Engine computer reports no stored or pending faults.");
+  } else add("info", "Fault codes not read yet", "");
+  if (s.cMax != null) {
+    if (s.cMax >= 110) add("crit", "Engine overheating", `Coolant reached ${s.cMax} °C. Stop, let it cool, check coolant level, fan and water pump.`);
+    else if (s.run >= 600 && s.cMax < 75) add("warn", "Engine not reaching operating temperature", `Max ${s.cMax} °C after ${Math.round(s.run / 60)} min running (normal 85–95 °C). Thermostat stuck open: more fuel, faster wear, weak heating.`);
+    else if (s.run >= 600 && s.cMax < 85) add("warn", "Engine running cool", `Max ${s.cMax} °C (normal 85–95 °C). Thermostat may be opening too early.`);
+    else if (s.run >= 600) add("ok", "Coolant temperature normal", `Max ${s.cMax} °C.`);
+    else add("info", "Engine warming up", `Coolant ${s.cEnd} °C — judged after 10 min of running.`);
+  }
+  if (s.run >= 600 && s.olCold / s.run > 0.3)
+    add("warn", "ECU adding extra fuel (cold-engine mode)", `Ran in cold open-loop ${pct(s.olCold / s.run)} of the time: the ECU enriches the mixture because the engine is cold — higher consumption, sooty plugs and catalyst.`);
+  if (s.runV.length >= 3) {
+    const m = median(s.runV);
+    if (m < 13.2) add("warn", "Charging voltage low", `${m.toFixed(1)} V while running (normal 13.5–14.6 V). Check alternator and belt.`);
+    else if (m > 14.8) add("warn", "Charging voltage high", `${m.toFixed(1)} V while running — voltage regulator may be faulty.`);
+    else add("ok", "Charging system OK", `${m.toFixed(1)} V while running.`);
+  }
+  if (s.offV.length >= 3 && median(s.offV) < 12.2) add("warn", "Battery weak at rest", `${median(s.offV).toFixed(1)} V with engine off (healthy ≥ 12.4 V).`);
+  if (s.ltft.length >= 5) {
+    const l = mean(s.ltft), ti = s.trimIdle.length >= 5 ? mean(s.trimIdle) : null, tc = s.trimCruise.length >= 5 ? mean(s.trimCruise) : null;
+    if (ti != null && tc != null && ti > 10 && tc < ti - 6) add("warn", "Lean at idle — likely vacuum leak", `Fuel trim ${signed(ti)} % at idle vs ${signed(tc)} % cruising. Check intake hoses and crankcase breather (PCV).`);
+    else if (l > 10) add("warn", "Mixture lean at all loads", `Long-term fuel trim ${signed(l)} % (fine within ±10 %)${ti != null && tc != null ? `, total ${signed(ti)} % idle / ${signed(tc)} % cruising` : ""}. Not idle-only, so less likely a vacuum leak — typical causes: dirty MAF sensor, low fuel pressure (filter/pump), or an air leak between MAF and throttle.`);
+    else if (l < -10) add("warn", "Mixture rich", `Long-term fuel trim ${signed(l)} %. Possible leaking injector, high fuel pressure or faulty O2 sensor.`);
+    else add("ok", "Fuel trims OK", `Long-term ${signed(l)} % (fine within ±10 %).` + (s.trimIdle.length + s.trimCruise.length < 5 ? " Engine rarely in closed loop, so less conclusive." : ""));
+  }
+  if (s.idleRpm.length >= 10) {
+    const m = mean(s.idleRpm), sd = std(s.idleRpm);
+    if (sd > 60) add("warn", "Unstable idle", `${m.toFixed(0)} ± ${sd.toFixed(0)} rpm. Possible misfire, vacuum leak or dirty throttle body.`);
+    else add("ok", "Idle stable", `${m.toFixed(0)} ± ${sd.toFixed(0)} rpm.`);
+  }
+  if (s.maxMaf != null) {
+    if (s.maxMaf < 60) add("warn", "Low airflow at full throttle", `${s.maxMaf} g/s at ${s.maxMafRpm} rpm (expect roughly 80+). Dirty MAF sensor or clogged air filter.`);
+    else add("ok", "Full-throttle airflow OK", `${s.maxMaf} g/s at ${s.maxMafRpm} rpm.`);
+  }
+  if (s.o2.length >= 60) {
+    const sd = std(s.o2);
+    if (sd > 0.2) add("info", "Catalyst: worth watching", `Rear O2 sensor varies (σ ${sd.toFixed(2)} V) in steady driving; a healthy catalyst keeps it steady. Only a hint — the ECU's own check (code P0420) is decisive.`);
+    else add("ok", "Catalyst OK", `Rear O2 sensor steady at ${mean(s.o2).toFixed(2)} V.`);
+  }
+  return F.sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev]);
+}
+
+function tips(s) {
+  const T = [], add = (title, detail, good) => T.push({ title, detail, good: !!good });
+  if (s.dist < 1) return [{ title: "Not enough driving yet", detail: "Tips appear after the first kilometre.", good: true }];
+  const per10 = 10 / s.dist, mv = Math.max(s.moving, 1);
+  if (s.idle > 180 && s.idle / s.run > 0.15)
+    add(`Idling ${fmtTime(s.idle)} (${pct(s.idle / s.run)} of drive time)`, `${s.hasFuel ? `Burned ${s.idleFuel.toFixed(2)} L standing still. ` : ""}Switch the engine off for waits longer than about a minute.`);
+  if (s.accel * per10 > 1.5) add(`${s.accel} hard accelerations`, "Accelerate progressively — at hard throttle the ECU switches to a rich mixture.");
+  if (s.brake * per10 > 1.5) add(`${s.brake} hard braking events`, "Look further ahead and lift off early: rolling in gear uses zero fuel (fuel cut-off).");
+  if (s.hiRpm / mv > 0.08) add(`High revs ${pct(s.hiRpm / mv)} of driving`, "Above 3000 rpm at part throttle. Shift up earlier — around 2000–2500 rpm in normal driving.");
+  if (s.lug > 15) add(`Labouring the engine ${Math.round(s.lug)} s`, "Heavy load below 1300 rpm strains the engine and clutch — shift down.");
+  if (s.hasFuel) {
+    const road = s.bands.filter(b => b.lo >= 50 && b.lp != null && b.d >= 1);
+    const best = road.reduce((m, b) => !m || b.lp < m.lp ? b : m, null), fast = road.filter(b => b.lo >= 110).at(-1);
+    if (best && fast && fast !== best && fast.lp > best.lp * 1.2)
+      add(`Speed costs: ${fast.lp.toFixed(1)} L/100 km at ${bandLabel(fast)} km/h`, `vs ${best.lp.toFixed(1)} L/100 km at ${bandLabel(best)} km/h on this drive. On a long trip, 10–20 km/h slower saves noticeably.`);
+    if (s.cold.d > 2 && s.warm.d > 2) {
+      const lc = s.cold.f / s.cold.d * 100, lw = s.warm.f / s.warm.d * 100;
+      if (lc > lw * 1.1) add(`Cold engine: ${lc.toFixed(1)} vs ${lw.toFixed(1)} L/100 km warm`, "Short trips with a cold engine cost the most.");
+    }
+  }
+  if (s.run >= 600 && s.cMax != null && s.cMax < 75) add("Fix the thermostat", "The engine never warmed up — expect roughly 10–20 % higher consumption until it is replaced.");
+  if (s.cut / mv > 0.05) add(`Good: rolled with fuel cut-off ${pct(s.cut / mv)} of the time`, "Lifting off early in gear is the cheapest way to slow down.", true);
+  if (!T.some(t => !t.good)) add("Smooth driving", "Nothing to improve in driving style on this drive.", true);
+  return T;
+}
+
+// ---------------------------------------------------------------- drawing
+function plot(g, box, rows, series, yMax, refY, pal) {
+  const [L0, T0, w, h] = box, L = L0 + 34, T = T0 + 6, pw = w - 44, ph = h - 28;
+  const t0 = rows.length ? rows[0].elapsed : 0, tMax = Math.max(60, rows.length ? rows.at(-1).elapsed - t0 : 60);
+  const X = t => L + (t - t0) / tMax * pw, Y = v => T + ph - Math.max(0, Math.min(v, yMax)) / yMax * ph;
+  g.font = "11px system-ui"; g.fillStyle = pal.muted; g.strokeStyle = pal.line; g.lineWidth = 1;
+  const yStep = [5, 10, 20, 25, 50, 100].find(s => yMax / s <= 8);
+  for (let v = 0; v <= yMax; v += yStep) { g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(L + pw, Y(v)); g.stroke(); g.fillText(v, L0 + 4, Y(v) + 4); }
+  const tStep = [60, 120, 300, 600, 900, 1800, 3600].find(s => tMax / s <= 10) || 7200;
+  for (let t = 0; t <= tMax; t += tStep) g.fillText(Math.round(t / 60) + "m", X(t0 + t) - 8, T0 + h - 4);
+  if (refY != null) { g.setLineDash([5, 5]); g.strokeStyle = pal.ref; g.beginPath(); g.moveTo(L, Y(refY)); g.lineTo(L + pw, Y(refY)); g.stroke(); g.setLineDash([]); }
+  for (const [key, color, scale] of series) {
+    g.strokeStyle = color; g.lineWidth = 2; g.beginPath(); let pen = false;
+    for (const r of rows) { const v = r[key]; if (v == null) { pen = false; continue; }
+      const x = X(r.elapsed), y = Y(v / (scale || 1)); pen ? g.lineTo(x, y) : g.moveTo(x, y); pen = true; }
+    g.stroke();
+  }
+}
+
+function canvasCtx(canvas) {
+  const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  return [g, w, h];
+}
+
+function drawChart(canvas, rows, series, yMax, refY) {
+  const [g, w, h] = canvasCtx(canvas);
+  plot(g, [0, 0, w, h], rows, series.map(([k, c, sc]) => [k, css(c), sc]), yMax, refY,
+    { muted: css("--muted"), line: css("--line"), ref: css("--ok") });
+}
+
+function drawCharts(rows, prefix) {
+  const fmax = Math.max(20, ...rows.map(r => r.fuel_lph || 0));
+  drawChart($(prefix + "-drive"), rows, [["rpm", "--s-rpm", 50], ["speed", "--s-speed"]], 200);
+  drawChart($(prefix + "-fuel"), rows, [["fuel_lph", "--s-fuel"]], Math.min(60, Math.ceil(fmax / 10) * 10));
+  drawChart($(prefix + "-temp"), rows, [["iat", "--s-iat"], ["coolant", "--s-coolant"]], 120, 90);
+}
+
+function drawBands(canvas, s) {
+  const [g, w, h] = canvasCtx(canvas), bands = s.bands, n = bands.length;
+  const L = 34, B = 40, T = 22, pw = w - L - 10, ph = h - B - T, bw = pw / n;
+  const vals = bands.map(b => b.lp).filter(v => v != null), yMax = Math.max(10, Math.ceil(Math.max(...vals, 0) / 5) * 5);
+  const best = Math.min(...bands.filter(b => b.lp != null && b.d >= 1).map(b => b.lp));
+  g.font = "11px system-ui"; g.strokeStyle = css("--line"); g.fillStyle = css("--muted");
+  for (let v = 0; v <= yMax; v += 5) { const y = T + ph - v / yMax * ph; g.beginPath(); g.moveTo(L, y); g.lineTo(L + pw, y); g.stroke(); g.fillText(v, 6, y + 4); }
+  if (!vals.length) { g.fillText(s.hasFuel ? "Not enough moving data yet" : "No fuel data in this log (recorded by an older version)", L + 10, T + 20); return; }
+  bands.forEach((b, i) => {
+    const x = L + i * bw + bw * 0.18, bwid = bw * 0.64;
+    g.fillStyle = css("--muted"); g.textAlign = "center";
+    g.fillText(bandLabel(b) + " km/h", x + bwid / 2, h - 22); g.fillText(b.d.toFixed(1) + " km", x + bwid / 2, h - 6);
+    if (b.lp == null) return;
+    const bh = Math.min(b.lp, yMax) / yMax * ph;
+    g.fillStyle = b.lp === best ? css("--ok") : css("--s-fuel");
+    g.fillRect(x, T + ph - bh, bwid, bh);
+    g.fillStyle = css("--text"); g.font = "600 13px system-ui"; g.fillText(b.lp.toFixed(1), x + bwid / 2, T + ph - bh - 6); g.font = "11px system-ui";
+  });
+  g.textAlign = "left";
+}
+
+const itemHTML = (sev, title, detail) => `<div class="item"><span class="dot sev-${sev}"></span><div><b>${title}</b>${detail ? `<div class="sub">${detail}</div>` : ""}</div></div>`;
+const renderFindings = (el, s) => $(el).innerHTML = s ? s.findings.map(f => itemHTML(f.sev, f.title, f.detail)).join("") : "";
+const renderTips = (el, s) => $(el).innerHTML = s ? s.tips.map(t => itemHTML(t.good ? "ok" : "warn", t.title, t.detail)).join("") : "";
+
+
+const TR = {
+  en: { title: "OBD-II diagnostic report", car: "Audi A4 (8E) · 2.0 petrol · 96 kW", drive: "Drive",
+    codes: "Fault codes", mil: "Check-engine light", on: "ON", off: "off", noCodesLog: "Codes not recorded for this log",
+    none: "No stored codes", pending: "Pending", whenSet: "Conditions when set", coolant: "coolant", load: "load",
+    thisDrive: "This drive", duration: "Duration", distance: "Distance", cStartEnd: "Coolant start → end",
+    cMax: "Coolant max", reached: "Reached 80 °C", never: "never", after: "after ", top: "Top speed",
+    lCool: "Coolant °C", lSpeed: "Speed km/h", lRef: "- - 90 °C normal operating temperature",
+    footer: "Recorded with ELM327 via OBD-II (read-only)",
+    short: () => "Drive shorter than 10 minutes — too short to judge warm-up.",
+    cold: s => `Engine never got warm (max ${s.cMax} °C in ${fmtTime(s.duration)}). Consistent with a thermostat stuck open.`,
+    flat: s => `Coolant flat at ${s.cStart}–${s.cMax} °C for the whole ${fmtTime(s.duration)} — engine is not warming up (thermostat stuck open or faulty sensor).`,
+    ok: s => `Engine reached ${s.cMax} °C — warm-up looks normal on this drive.`,
+    part: s => `Engine only reached ${s.cMax} °C — slow/partial warm-up; thermostat likely opening too early.`,
+    dtc: { P0116: "Engine coolant temperature circuit range/performance",
+      P0117: "Engine coolant temperature circuit low", P0118: "Engine coolant temperature circuit high",
+      P0125: "Insufficient coolant temperature for closed-loop fuel control",
+      P0128: "Coolant thermostat (coolant temp below regulating temperature)" } },
+  cs: { title: "Diagnostický protokol OBD-II", car: "Audi A4 (8E) · 2.0 benzín · 96 kW", drive: "Jízda",
+    codes: "Chybové kódy", mil: "Kontrolka motoru", on: "SVÍTÍ", off: "nesvítí", noCodesLog: "Kódy nebyly k tomuto záznamu uloženy",
+    none: "Žádné uložené chyby", pending: "Čekající", whenSet: "Podmínky při uložení chyby", coolant: "chladicí kapalina", load: "zatížení",
+    thisDrive: "Tato jízda", duration: "Doba", distance: "Vzdálenost", cStartEnd: "Teplota od → do",
+    cMax: "Teplota max.", reached: "Dosaženo 80 °C", never: "nikdy", after: "po ", top: "Max. rychlost",
+    lCool: "Chladicí kapalina °C", lSpeed: "Rychlost km/h", lRef: "- - 90 °C běžná provozní teplota",
+    footer: "Naměřeno ELM327 přes OBD-II (pouze čtení)",
+    short: () => "Jízda kratší než 10 minut — příliš krátká na posouzení zahřívání.",
+    cold: s => `Motor se nezahřál (max ${s.cMax} °C za ${fmtTime(s.duration)}). Odpovídá trvale otevřenému termostatu.`,
+    flat: s => `Teplota se celou dobu (${fmtTime(s.duration)}) drží na ${s.cStart}–${s.cMax} °C — motor se nezahřívá (otevřený termostat nebo vadný snímač).`,
+    ok: s => `Motor dosáhl ${s.cMax} °C — zahřívání při této jízdě vypadá normálně.`,
+    part: s => `Motor dosáhl jen ${s.cMax} °C — pomalé/neúplné zahřívání; termostat zřejmě otevírá příliš brzy.`,
+    dtc: { P0116: "Snímač teploty chladicí kapaliny — rozsah/funkce mimo meze",
+      P0117: "Snímač teploty chladicí kapaliny — nízký signál", P0118: "Snímač teploty chladicí kapaliny — vysoký signál",
+      P0125: "Nedostatečná teplota chladicí kapaliny pro regulaci paliva v uzavřené smyčce",
+      P0128: "Termostat — teplota chladicí kapaliny pod regulační teplotou" } },
+};
+const verdictFor = (s, t) => s.cMax >= 85 ? t.ok(s)
+  : s.duration >= 300 && s.cMax < 75 && s.cMax - s.cStart <= 5 ? t.flat(s)
+  : s.duration < 600 ? t.short(s) : s.cMax < 75 ? t.cold(s) : t.part(s);
+let lastReport = null;
+
+function drawReport(name, rows, codes, s) {
+  lastReport = [name, rows, codes, s];
+  const t = TR[$("lang").value] || TR.cs, verdict = verdictFor(s, t);
+  const W = 1200, H = 860, c = $("report"), g = c.getContext("2d");
+  c.width = W; c.height = H;
+  const ink = "#15181d", mute = "#5f6875", acc = "#c2410c";
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, W, H);
+  const txt = (t, x, y, font, color) => { g.font = font; g.fillStyle = color || ink; g.fillText(t, x, y); };
+  const m = name.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+  const when = m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}` : name;
+  txt(t.title, 40, 58, "700 32px system-ui");
+  txt(t.car, 40, 92, "20px system-ui", mute);
+  g.font = "20px system-ui"; txt(t.drive + ": " + when, W - 40 - g.measureText(t.drive + ": " + when).width, 92, "20px system-ui", mute);
+  g.fillStyle = "#e5e7eb"; g.fillRect(40, 112, W - 80, 2);
+
+  // Fault codes
+  let y = 152;
+  txt(t.codes, 40, y, "600 22px system-ui");
+  txt(codes ? `${t.mil}: ${codes.mil ? t.on : t.off}` : t.noCodesLog, 260, y, "20px system-ui", codes && codes.mil ? acc : mute);
+  y += 36;
+  const stored = codes ? codes.stored : [];
+  if (codes && !stored.length) { txt(t.none, 60, y, "20px system-ui", mute); y += 32; }
+  for (const d of stored) { txt(d, 60, y, "700 24px ui-monospace, monospace", acc); txt(t.dtc[d] || "", 170, y, "20px system-ui"); y += 34; }
+  if (codes && codes.pending && codes.pending.length) { txt(t.pending + ": " + codes.pending.join(", "), 60, y, "20px system-ui"); y += 32; }
+  const ff = codes && codes.freeze;
+  if (ff && ff.coolant != null)
+    { txt(`${t.whenSet}${ff.dtc ? " (" + ff.dtc + ")" : ""}:  ${t.coolant} ${ff.coolant} °C · ${ff.rpm} rpm · ${ff.speed} km/h · ${t.load} ${ff.load} %`, 60, y, "20px system-ui", mute); y += 32; }
+
+  // Drive summary
+  y += 18; txt(t.thisDrive, 40, y, "600 22px system-ui"); y += 16;
+  const cells = [[t.duration, fmtTime(s.duration)], [t.distance, s.dist.toFixed(1) + " km"],
+    [t.cStartEnd, `${s.cStart} → ${s.cEnd} °C`], [t.cMax, s.cMax + " °C"],
+    [t.reached, s.firstWarm == null ? t.never : t.after + fmtTime(s.firstWarm)], [t.top, s.vMax + " km/h"]];
+  const cw = (W - 80) / cells.length;
+  cells.forEach(([k, v], i) => { txt(k, 40 + i * cw, y + 26, "16px system-ui", mute); txt(v, 40 + i * cw, y + 58, "700 26px system-ui"); });
+  y += 88;
+  g.fillStyle = "#fff7ed"; g.fillRect(40, y, W - 80, 46); g.fillStyle = acc; g.fillRect(40, y, 5, 46);
+  let vf = 20; do { g.font = `600 ${vf}px system-ui`; } while (g.measureText(verdict).width > W - 120 && --vf > 12);
+  txt(verdict, 60, y + 30, g.font);
+  y += 70;
+
+  // Chart
+  let lx = 40; for (const [label, col, f] of [[t.lCool, "#ea580c", "600"], [t.lSpeed, "#2563eb", "600"], [t.lRef, "#16a34a", "400"]])
+    { txt(label, lx, y, f + " 18px system-ui", col); lx += g.measureText(label).width + 28; }
+  plot(g, [40, y + 10, W - 80, H - y - 30], rows, [["speed", "#93b4f5"], ["coolant", "#ea580c"]], 160, 90,
+    { muted: mute, line: "#e5e7eb", ref: "#16a34a" });
+  txt(t.footer, 40, H - 6, "13px system-ui", "#9ca3af");
+}
+
+
+// ---------------------------------------------------------------- trips (server data)
+const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+let trips = [], hist = null, mapyKey = "", map = null, mapLayer = null;
+const fmtDate = t => new Date(t * 1000).toLocaleString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const tripName = t => { const d = new Date(t.started_at * 1000), p = n => String(n).padStart(2, "0");
+  return `drive-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
+
+function renderList(selected) {
+  const km = trips.reduce((a, t) => a + (t.distance_km || 0), 0), withFuel = trips.filter(t => t.fuel_l != null);
+  const fkm = withFuel.reduce((a, t) => a + (t.distance_km || 0), 0), l = withFuel.reduce((a, t) => a + t.fuel_l, 0);
+  $("totals").textContent = `${trips.length} trips · ${km.toFixed(0)} km · ${l.toFixed(1)} L` + (fkm > 1 ? ` · ${(l / fkm * 100).toFixed(1)} L/100 km` : "");
+  $("trip-list").innerHTML = trips.map(t => {
+    const s = t.summary || {}, lp = s.l_per_100km != null ? `${s.l_per_100km} L/100` : "";
+    return `<div class="trip${t.uuid === selected ? " on" : ""}" data-uuid="${t.uuid}">
+      <div class="d">${fmtDate(t.started_at)}</div>
+      <div class="s">${(t.distance_km ?? 0).toFixed(1)} km · ${t.duration_s ? fmtTime(t.duration_s) : "in progress"}${lp ? " · " + lp : ""}${s.coolant_max != null ? " · max " + s.coolant_max + " °C" : ""}</div></div>`;
+  }).join("") || "No trips yet.";
+  for (const el of document.querySelectorAll(".trip")) el.onclick = () => openTrip(el.dataset.uuid);
+}
+
+function renderMap(rows) {
+  const pts = rows.filter(r => r.lat != null && r.lon != null).map(r => [r.lat, r.lon]);
+  $("map").classList.toggle("hidden", pts.length < 2);
+  if (pts.length < 2 || !window.L) return;
+  if (!map) {
+    map = L.map("map");
+    L.tileLayer(`https://api.mapy.com/v1/maptiles/basic/256/{z}/{x}/{y}?lang=cs&apikey=${mapyKey}`, {
+      maxZoom: 19, attribution: '&copy; <a href="https://api.mapy.com/copyright">Seznam.cz a.s. a další</a>' }).addTo(map);
+  }
+  if (mapLayer) mapLayer.remove();
+  mapLayer = L.layerGroup([
+    L.polyline(pts, { color: "#2563eb", weight: 5, opacity: .85 }),
+    L.circleMarker(pts[0], { radius: 7, color: "#fff", fillColor: "#16a34a", fillOpacity: 1 }),
+    L.circleMarker(pts.at(-1), { radius: 7, color: "#fff", fillColor: "#e11d48", fillOpacity: 1 }),
+  ]).addTo(map);
+  map.invalidateSize(); map.fitBounds(L.latLngBounds(pts), { padding: [20, 20] });
+}
+
+function renderHistory() {
+  if (!hist) return;
+  const { name, rows, codes } = hist, s = analyze(rows, codes);
+  if (!s) { $("h-health").innerHTML = itemHTML("info", "No samples in this trip", ""); return; }
+  $("h-dist").innerHTML = unit(s.dist.toFixed(1), "km");
+  $("h-time").textContent = fmtTime(s.duration); $("h-moving").textContent = `moving ${fmtTime(s.moving)}`;
+  $("h-avg").innerHTML = s.lp100 == null ? "–" : unit(s.lp100.toFixed(1), "L/100 km");
+  $("h-fuelused").innerHTML = s.hasFuel ? unit(s.fuel.toFixed(2), "L") : "–";
+  $("h-cost").textContent = s.hasFuel && price() ? `≈ ${(s.fuel * price()).toFixed(0)} Kč` : "";
+  $("h-speed").innerHTML = s.moving ? unit((s.dist / s.moving * 3600).toFixed(0), "km/h") : "–"; $("h-top").textContent = `top ${s.vMax} km/h`;
+  $("h-idle").textContent = fmtTime(s.idle); $("h-idlefuel").textContent = s.hasFuel ? `${s.idleFuel.toFixed(2)} L while standing` : "";
+  $("h-cool").innerHTML = s.cMax == null ? "–" : unit(`${s.cStart}→${s.cEnd}`, "°C"); $("h-coolsub").textContent = s.cMax == null ? "" : `max ${s.cMax} °C`;
+  $("h-eco").textContent = s.eco ?? "–";
+  renderFindings("h-health", s); renderTips("h-tips", s);
+  drawBands($("h-bands"), s); drawCharts(rows, "h");
+  drawReport(name, rows, codes, s);
+}
+
+async function openTrip(uuid) {
+  const d = await api("/web/api/trips/" + uuid);
+  hist = { name: tripName(d.trip), rows: d.samples, codes: d.codes };
+  $("trip-title").textContent = fmtDate(d.trip.started_at) + (d.trip.device ? " · " + d.trip.device : "");
+  history.replaceState(null, "", "#" + uuid);
+  renderList(uuid); renderHistory(); renderMap(d.samples);
+}
+
+async function loadLog() {
+  const d = await api("/web/api/logs?limit=500");
+  const f = t => new Date(t * 1000).toLocaleString("cs-CZ");
+  $("applog").textContent = d.lines.map(l => `${f(l.t)} ${l.level} [${l.device}] ${l.msg}`).join("\n") || "(no log yet)";
+}
+$("log-box").ontoggle = () => $("log-box").open && loadLog().catch(e => $("applog").textContent = e.message);
+
+$("price").value = store.get("fuelPrice", "38");
+$("price").oninput = () => { store.set("fuelPrice", $("price").value); renderHistory(); };
+$("lang").onchange = () => lastReport && drawReport(...lastReport);
+$("save-png").onclick = () => { const a = document.createElement("a");
+  a.href = $("report").toDataURL("image/png"); a.download = (hist ? hist.name : "report") + "-report.png"; a.click(); };
+window.onresize = () => renderHistory();
+
+(async () => {
+  try { mapyKey = (await api("/web/api/config")).mapy_key; } catch {}
+  trips = (await api("/web/api/trips?limit=1000")).trips;
+  const want = location.hash.slice(1);
+  renderList(want);
+  const first = trips.find(t => t.uuid === want) || trips[0];
+  if (first) openTrip(first.uuid);
+})().catch(e => $("trip-list").textContent = "Failed to load: " + e.message);
+</script>
+</body>
+</html>

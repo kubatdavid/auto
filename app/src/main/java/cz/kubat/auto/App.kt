@@ -3,6 +3,7 @@ package cz.kubat.auto
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import cz.kubat.auto.data.AppLog
 import cz.kubat.auto.data.Db
 import cz.kubat.auto.data.Settings
 import cz.kubat.auto.record.LiveState
@@ -23,6 +24,7 @@ class App : Application() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_RECORDING, "Recording", NotificationManager.IMPORTANCE_LOW)
         )
+        AppLog.i("App start ${BuildConfigInfo.versionName(this)} on ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}")
         SyncWorker.schedulePeriodic(this)
         SyncWorker.runNow(this)
     }

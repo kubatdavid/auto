@@ -11,6 +11,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import cz.kubat.auto.App
+import cz.kubat.auto.data.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -67,7 +68,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (s.token.isEmpty()) return@withContext Result.success()
         val api = Api(s.serverUrl, s.token)
         try {
+            uploadLogs(app, api)
             if (s.mapyKey.isEmpty()) fetchConfig(app)
+            var uploaded = 0
             for (trip in app.db.tripsToSync()) {
                 val base = "/api/v1/trips/${trip.uuid}"
                 if (!trip.tripSynced) {
@@ -83,6 +86,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     api.request("POST", "$base/samples", JSONObject().put("samples", arr))
                     synced = batch.last().first
                     app.db.markSyncedSeq(trip.uuid, synced)
+                    uploaded += batch.size
                 }
                 for ((t, json) in app.db.unsyncedDtcs(trip.uuid)) {
                     api.request("POST", "$base/dtc", JSONObject(json))
@@ -92,12 +96,17 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 if (ended != null && synced >= app.db.maxSeq(trip.uuid)) {
                     api.request("POST", "$base/finish", JSONObject().put("ended_at", ended))
                     app.db.markFinishSynced(trip.uuid)
+                    AppLog.i("Sync: trip ${trip.uuid.take(8)} finished on server")
                 }
             }
+            if (uploaded > 0) AppLog.i("Sync: uploaded $uploaded samples")
+            uploadLogs(app, api)
             Result.success()
         } catch (e: ApiException) {
+            AppLog.e("Sync failed", e)
             if (e.code == 401) Result.failure() else Result.retry()
         } catch (e: IOException) {
+            AppLog.w("Sync: network error (${e.message}), will retry")
             Result.retry()
         }
     }
@@ -105,6 +114,17 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     companion object {
         private const val BATCH = 2000
         private val NETWORK = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+        fun uploadLogs(app: App, api: Api) {
+            while (true) {
+                val batch = app.db.unsyncedLogs(500)
+                if (batch.isEmpty()) return
+                val arr = JSONArray()
+                for ((id, l) in batch) arr.put(JSONObject().put("id", id).put("t", l.t).put("level", l.level).put("msg", l.msg))
+                api.request("POST", "/api/v1/logs", JSONObject().put("lines", arr))
+                app.db.markLogsSynced(batch.last().first)
+            }
+        }
 
         fun fetchConfig(app: App) {
             val cfg = Api(app.settings.serverUrl, app.settings.token).request("GET", "/api/v1/config")

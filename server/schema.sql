@@ -48,3 +48,13 @@ CREATE TABLE IF NOT EXISTS dtc_snapshot (
   freeze    JSON     NULL,
   PRIMARY KEY (trip_uuid, t)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS app_log (
+  device    VARCHAR(64)  NOT NULL,
+  client_id BIGINT       NOT NULL,                   -- row id on the phone, makes uploads idempotent
+  t         DOUBLE       NOT NULL,
+  level     CHAR(1)      NOT NULL,
+  msg       TEXT         NOT NULL,
+  PRIMARY KEY (device, client_id),
+  KEY t (t)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

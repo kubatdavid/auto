@@ -19,6 +19,7 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import cz.kubat.auto.App
+import cz.kubat.auto.data.AppLog
 import cz.kubat.auto.obd.Elm
 import cz.kubat.auto.obd.Pids
 import cz.kubat.auto.sync.SyncWorker
@@ -61,6 +62,7 @@ class RecorderService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
         if (job == null) {
+            AppLog.i("Recorder: started")
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "auto:recorder").apply { acquire() }
             startGps()
@@ -75,6 +77,7 @@ class RecorderService : Service() {
         (getSystemService(LOCATION_SERVICE) as LocationManager).removeUpdates(locationListener)
         wakeLock?.release()
         endTrip()
+        AppLog.i("Recorder: stopped")
         app.live.update { it.copy(link = Link.STOPPED, status = "Not recording", alerts = emptyList()) }
         super.onDestroy()
     }
@@ -85,6 +88,7 @@ class RecorderService : Service() {
         try {
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper())
         } catch (e: Exception) {
+            AppLog.e("GPS unavailable", e)
             app.live.update { it.copy(status = "GPS unavailable: ${e.message}") }
         }
     }
@@ -110,11 +114,13 @@ class RecorderService : Service() {
         track.clear(); alerted.clear()
         app.db.closeDanglingTrips(tripUuid)
         app.db.startTrip(tripUuid!!, now)
+        AppLog.i("Trip ${tripUuid!!.take(8)} started")
     }
 
     private fun endTrip() {
         val uuid = tripUuid ?: return
         app.db.endTrip(uuid, lastT ?: tripStart)
+        AppLog.i("Trip ${uuid.take(8)} ended: %.1f km, %.2f L, $seq samples".format(distance, fuel))
         tripUuid = null
         initialCodes = null
         SyncWorker.runNow(this)
@@ -137,6 +143,7 @@ class RecorderService : Service() {
                 publish(Link.LIVE, "Live")
                 poll(elm)
             } catch (e: Exception) {
+                AppLog.w("Link lost/failed: ${e.javaClass.simpleName}: ${e.message}")
                 publish(Link.WAITING, "Waiting for car: ${e.message ?: e.javaClass.simpleName}")
             } finally {
                 elm.close()
@@ -222,6 +229,7 @@ class RecorderService : Service() {
 
     private fun readCodes(elm: Elm) {
         val c = elm.codes()
+        AppLog.i("Codes: MIL ${c.mil}, stored ${c.stored}, pending ${c.pending}")
         if (initialCodes == null) initialCodes = c.stored.toSet()
         app.live.update { it.copy(codes = c) }
         val uuid = tripUuid ?: return

@@ -128,8 +128,10 @@ function summarize(PDO $db, string $uuid): array
     $cFirst = null;
     $vMax = 0;
     $n = 0;
+    $fuelRows = 0;
     while ($r = $q->fetch()) {
         $n++;
+        if ($r['fuel_lph'] !== null) $fuelRows++;
         if ($r['coolant'] !== null) {
             $cFirst ??= (int)$r['coolant'];
             $cMax = max($cMax ?? -99, (int)$r['coolant']);
@@ -146,8 +148,9 @@ function summarize(PDO $db, string $uuid): array
         $prev = $r;
     }
     return [
-        'samples' => $n, 'running_s' => round($run), 'distance_km' => round($dist, 2), 'fuel_l' => round($fuel, 3),
-        'l_per_100km' => $dist > 0.5 ? round($fuel / $dist * 100, 2) : null,
+        'samples' => $n, 'running_s' => round($run), 'distance_km' => round($dist, 2),
+        'fuel_l' => $fuelRows ? round($fuel, 3) : null,  // older logs have no fuel data
+        'l_per_100km' => $fuelRows && $dist > 0.5 ? round($fuel / $dist * 100, 2) : null,
         'coolant_start' => $cFirst, 'coolant_max' => $cMax, 'speed_max' => $vMax,
     ];
 }
@@ -168,7 +171,7 @@ function finish_trip(PDO $db, string $uuid): never
 
 function list_trips(PDO $db): never
 {
-    $limit = max(1, min(500, (int)($_GET['limit'] ?? 100)));
+    $limit = max(1, min(1000, (int)($_GET['limit'] ?? 100)));
     $q = $db->prepare('SELECT uuid, device, started_at, ended_at, duration_s, distance_km, fuel_l, summary
                        FROM trip ORDER BY started_at DESC LIMIT ' . $limit);
     $q->execute();
@@ -179,10 +182,91 @@ function list_trips(PDO $db): never
     out(200, ['trips' => $trips]);
 }
 
+function post_logs(PDO $db, string $device): never
+{
+    $lines = body()['lines'] ?? null;
+    if (!is_array($lines) || count($lines) > 2000) out(400, ['error' => 'lines: array of at most 2000']);
+    $q = $db->prepare('INSERT IGNORE INTO app_log (device, client_id, t, level, msg) VALUES (?, ?, ?, ?, ?)');
+    foreach ($lines as $l) {
+        if (!is_array($l) || !is_int($l['id'] ?? null) || !is_numeric($l['t'] ?? null)) out(400, ['error' => 'each line needs integer id and numeric t']);
+        $q->execute([$device, $l['id'], (float)$l['t'], substr((string)($l['level'] ?? 'I'), 0, 1), mb_substr((string)($l['msg'] ?? ''), 0, 4000)]);
+    }
+    out(200, ['ok' => true, 'received' => count($lines)]);
+}
+
+function web_logs(PDO $db): never
+{
+    $limit = max(1, min(5000, (int)($_GET['limit'] ?? 500)));
+    $q = $db->prepare('SELECT device, t, level, msg FROM app_log ORDER BY t DESC, client_id DESC LIMIT ' . $limit);
+    $q->execute();
+    out(200, ['lines' => array_map(fn($r) => ['device' => $r['device'], 't' => (float)$r['t'], 'level' => $r['level'], 'msg' => $r['msg']], $q->fetchAll())]);
+}
+
+// ---------------------------------------------------------------- internal web UI
+// Served only for auto.force.local (Caddy restricts that host to LAN/VPN; the public host
+// forwards /api/v1/* only). Read-only, no token.
+
+function web_trip(PDO $db, string $uuid): never
+{
+    $q = $db->prepare('SELECT uuid, device, started_at, ended_at, duration_s, distance_km, fuel_l, summary FROM trip WHERE uuid = ?');
+    $q->execute([$uuid]);
+    $trip = $q->fetch() ?: out(404, ['error' => 'unknown trip']);
+    $trip['summary'] = $trip['summary'] ? json_decode($trip['summary'], true) : null;
+
+    $q = $db->prepare('SELECT * FROM sample WHERE trip_uuid = ? ORDER BY seq');
+    $q->execute([$uuid]);
+    $samples = [];
+    $t0 = null;
+    while ($r = $q->fetch()) {
+        $row = [];
+        foreach (SAMPLE_COLUMNS as $key => $col) {
+            $row[$key] = $r[$col] === null ? null : (float)$r[$col];
+        }
+        $t0 ??= $row['t'];
+        $row['elapsed'] = round($row['t'] - $t0, 2);
+        $samples[] = $row;
+    }
+
+    $q = $db->prepare('SELECT t, mil, stored, pending, freeze FROM dtc_snapshot WHERE trip_uuid = ? ORDER BY t DESC LIMIT 1');
+    $q->execute([$uuid]);
+    $codes = null;
+    if ($d = $q->fetch()) {
+        $codes = [
+            'read_at' => (float)$d['t'], 'mil' => $d['mil'] === null ? null : (bool)$d['mil'],
+            'stored' => json_decode($d['stored'] ?? '[]', true), 'pending' => json_decode($d['pending'] ?? '[]', true),
+            'freeze' => json_decode($d['freeze'] ?? '{}', true),
+        ];
+    }
+    out(200, ['trip' => $trip, 'samples' => $samples, 'codes' => $codes]);
+}
+
+function web(array $cfg, string $path, string $method): never
+{
+    if ($method !== 'GET') out(405, ['error' => 'read-only']);
+    if ($path === '' || $path === '/index.html') {
+        header('Content-Type: text/html; charset=utf-8');
+        readfile(__DIR__ . '/../web.html');
+        exit;
+    }
+    try {
+        if ($path === '/web/api/config') out(200, ['mapy_key' => $cfg['mapy_key']]);
+        $db = db($cfg);
+        if ($path === '/web/api/trips') list_trips($db);
+        if ($path === '/web/api/logs') web_logs($db);
+        if (preg_match('#^/web/api/trips/([0-9a-f-]{36})$#', $path, $m)) web_trip($db, $m[1]);
+    } catch (PDOException $e) {
+        error_log('auto web: ' . $e->getMessage());
+        out(500, ['error' => 'database error']);
+    }
+    out(404, ['error' => 'not found']);
+}
+
 // ---------------------------------------------------------------- routing
 $path = rtrim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/', '/');
 $method = $_SERVER['REQUEST_METHOD'];
 
+$host = strtolower(explode(':', $_SERVER['HTTP_HOST'] ?? '')[0]);
+if ($host === 'auto.force.local' && !str_starts_with($path, '/api/v1/')) web($cfg, $path, $method);
 if (!str_starts_with($path, '/api/v1/')) out(404, ['error' => 'not found']);
 $device = device($cfg);
 
@@ -191,6 +275,7 @@ try {
     if ($method === 'GET' && $path === '/api/v1/config') out(200, ['mapy_key' => $cfg['mapy_key']]);
     $db = db($cfg);
     if ($method === 'GET' && $path === '/api/v1/trips') list_trips($db);
+    if ($method === 'POST' && $path === '/api/v1/logs') post_logs($db, $device);
     if (preg_match('#^/api/v1/trips/([0-9a-f-]{36})(/[a-z]+)?$#', $path, $m)) {
         [$uuid, $sub] = [$m[1], $m[2] ?? ''];
         match ("$method $sub") {

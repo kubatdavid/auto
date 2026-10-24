@@ -21,7 +21,7 @@ data class TripRow(
 )
 
 /** Local store: everything is written here first; [cz.kubat.auto.sync.SyncWorker] uploads later. */
-class Db(context: Context) : SQLiteOpenHelper(context, "auto.db", null, 1) {
+class Db(context: Context) : SQLiteOpenHelper(context, "auto.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -34,9 +34,35 @@ class Db(context: Context) : SQLiteOpenHelper(context, "auto.db", null, 1) {
         )
         db.execSQL("CREATE TABLE sample (trip_uuid TEXT NOT NULL, seq INTEGER NOT NULL, json TEXT NOT NULL, PRIMARY KEY (trip_uuid, seq))")
         db.execSQL("CREATE TABLE dtc (trip_uuid TEXT NOT NULL, t REAL NOT NULL, json TEXT NOT NULL, synced INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (trip_uuid, t))")
+        createLog(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) createLog(db)
+    }
+
+    private fun createLog(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE log (id INTEGER PRIMARY KEY AUTOINCREMENT, t REAL NOT NULL, level TEXT NOT NULL, msg TEXT NOT NULL, synced INTEGER NOT NULL DEFAULT 0)")
+    }
+
+    fun addLog(line: AppLog.Line) {
+        writableDatabase.insert("log", null, ContentValues().apply {
+            put("t", line.t)
+            put("level", line.level)
+            put("msg", line.msg)
+        })
+    }
+
+    /** (id, line) pairs not yet on the server, oldest first. */
+    fun unsyncedLogs(limit: Int): List<Pair<Long, AppLog.Line>> =
+        readableDatabase.rawQuery("SELECT id, t, level, msg FROM log WHERE synced = 0 ORDER BY id LIMIT $limit", null).use { c ->
+            buildList { while (c.moveToNext()) add(c.getLong(0) to AppLog.Line(c.getDouble(1), c.getString(2), c.getString(3))) }
+        }
+
+    fun markLogsSynced(upToId: Long) {
+        writableDatabase.execSQL("UPDATE log SET synced = 1 WHERE id <= ?", arrayOf<Any>(upToId))
+        writableDatabase.execSQL("DELETE FROM log WHERE synced = 1 AND id < ?", arrayOf<Any>(upToId - 5000))
+    }
 
     fun startTrip(uuid: String, startedAt: Double) {
         writableDatabase.insert("trip", null, ContentValues().apply {
