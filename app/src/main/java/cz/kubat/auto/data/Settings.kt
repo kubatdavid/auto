@@ -45,7 +45,7 @@ class Settings(context: Context) {
         set(v) = prefs.edit().putString("places", v).apply()
 
     companion object {
-        const val DEFAULT_DRIVE_TILES = "coolant:M,consumption:M,trip_avg:S,volts:S,trim:S"
+        const val DEFAULT_DRIVE_TILES = "consumption:M,trip_avg:M,volts:S,trim:S,trip_fuel:S"
         const val DEFAULT_SERVER = "https://auto.abhishekam.cz"
     }
 }
