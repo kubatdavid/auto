@@ -56,6 +56,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cz.kubat.auto.App
+import cz.kubat.auto.data.DriveTile
+import cz.kubat.auto.data.TileSize
 import cz.kubat.auto.data.AppLog
 import cz.kubat.auto.record.Link
 import cz.kubat.auto.record.Live
@@ -117,8 +119,8 @@ fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().background(if (a.critical) Palette.hot else Palette.warm).padding(12.dp),
             )
         }
-        StatusBar(live, onStart, onStop)
-        BigValues(live)
+        StatusBar(live, onStart, onStop, compact)
+        BigValues(live, compact)
         if (!compact) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp)) {
                 MapPane(
@@ -151,8 +153,8 @@ fun DriveScreen(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
 }
 
 @Composable
-private fun StatusBar(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun StatusBar(live: Live, onStart: () -> Unit, onStop: () -> Unit, compact: Boolean) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (compact) 0.dp else 6.dp), verticalAlignment = Alignment.CenterVertically) {
         val color = when (live.link) {
             Link.LIVE -> Palette.ok
             Link.CONNECTING, Link.WAITING -> Palette.warm
@@ -172,33 +174,46 @@ private fun StatusBar(live: Live, onStart: () -> Unit, onStop: () -> Unit) {
 }
 
 @Composable
-private fun BigValues(live: Live) {
-    val sensors = App.instance.settings.driveSensors.mapNotNull { SENSOR_BY_KEY[it] }
-    if (sensors.isEmpty()) return
-    val size = when {
-        sensors.size <= 4 -> 52.sp
-        sensors.size <= 6 -> 40.sp
-        else -> 30.sp
+private fun BigValues(live: Live, compact: Boolean) {
+    val tiles = App.instance.settings.driveTiles.filter { it.key in SENSOR_BY_KEY }
+    if (tiles.isEmpty()) return
+    // pack tiles into rows of 6 units, in the user's order
+    val rows = ArrayList<MutableList<DriveTile>>()
+    for (t in tiles) {
+        val last = rows.lastOrNull()
+        if (last != null && last.sumOf { it.size.units } + t.size.units <= 6) last += t else rows += mutableListOf(t)
     }
-    Column(Modifier.padding(horizontal = 8.dp)) {
-        for (row in sensors.chunked(2)) {
+    Column(Modifier.padding(horizontal = 6.dp)) {
+        for (row in rows) {
             Row {
-                for (s in row) {
+                for (t in row) {
+                    val s = SENSOR_BY_KEY.getValue(t.key)
                     val v = s.value(live)
-                    Big(v?.let(s.format) ?: "–", if (s.unit.isEmpty()) s.label else "${s.unit} · ${s.label}", Modifier.weight(1f),
-                        v?.let(s.color) ?: Palette.text, size)
+                    val size = when (t.size) {
+                        TileSize.L -> if (compact) 40.sp else 60.sp
+                        TileSize.M -> if (compact) 30.sp else 46.sp
+                        TileSize.S -> if (compact) 22.sp else 30.sp
+                    }
+                    Tile(
+                        v?.let(s.format) ?: "–", if (s.unit.isEmpty()) s.label else "${s.unit} · ${s.label}",
+                        Modifier.weight(t.size.units.toFloat()), v?.let(s.color) ?: Palette.text, size, compact,
+                    )
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+                val free = 6 - row.sumOf { it.size.units }
+                if (free > 0) Spacer(Modifier.weight(free.toFloat()))
             }
         }
     }
 }
 
 @Composable
-private fun Big(value: String, unit: String, modifier: Modifier, color: Color = Palette.text, size: androidx.compose.ui.unit.TextUnit = 52.sp) {
-    Column(modifier.padding(4.dp).background(Palette.panel, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 4.dp)) {
+private fun Tile(value: String, label: String, modifier: Modifier, color: Color, size: androidx.compose.ui.unit.TextUnit, compact: Boolean) {
+    Column(
+        modifier.padding(if (compact) 2.dp else 3.dp).background(Palette.panel, RoundedCornerShape(8.dp))
+            .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 1.dp else 3.dp)
+    ) {
         Text(value, color = color, fontSize = size, fontWeight = FontWeight.Bold, maxLines = 1)
-        Text(unit, color = Palette.muted, fontSize = 12.sp, maxLines = 1)
+        Text(label, color = Palette.muted, fontSize = if (compact) 10.sp else 11.sp, maxLines = 1)
     }
 }
 

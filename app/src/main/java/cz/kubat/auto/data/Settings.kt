@@ -2,6 +2,11 @@ package cz.kubat.auto.data
 
 import android.content.Context
 
+/** Tile width on the Drive tab: S = third, M = half, L = full row (units of 6). */
+enum class TileSize(val units: Int) { S(2), M(3), L(6) }
+
+data class DriveTile(val key: String, val size: TileSize)
+
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
@@ -26,10 +31,13 @@ class Settings(context: Context) {
         get() = prefs.getFloat("fuel_price", 38f).toDouble()
         set(v) = prefs.edit().putFloat("fuel_price", v.toFloat()).apply()
 
-    /** Sensor keys shown as big tiles on the Drive tab, in order. */
-    var driveSensors: List<String>
-        get() = (prefs.getString("drive_sensors", null) ?: DEFAULT_DRIVE_SENSORS).split(',').filter { it.isNotBlank() }
-        set(v) = prefs.edit().putString("drive_sensors", v.joinToString(",")).apply()
+    /** Tiles on the Drive tab, in order; stored as "key:S|M|L,...". */
+    var driveTiles: List<DriveTile>
+        get() = (prefs.getString("drive_tiles", null) ?: DEFAULT_DRIVE_TILES).split(',').filter { it.isNotBlank() }.map {
+            val (k, size) = (it.split(':') + "M").let { p -> p[0] to p[1] }
+            DriveTile(k, TileSize.entries.firstOrNull { e -> e.name == size } ?: TileSize.M)
+        }
+        set(v) = prefs.edit().putString("drive_tiles", v.joinToString(",") { "${it.key}:${it.size.name}" }).apply()
 
     /** Saved destinations as a JSON array of {name, location, lat, lon}. */
     var placesJson: String
@@ -37,7 +45,7 @@ class Settings(context: Context) {
         set(v) = prefs.edit().putString("places", v).apply()
 
     companion object {
-        const val DEFAULT_DRIVE_SENSORS = "speed,rpm,consumption,coolant"
+        const val DEFAULT_DRIVE_TILES = "coolant:M,consumption:M,trip_avg:S,volts:S,trim:S"
         const val DEFAULT_SERVER = "https://auto.abhishekam.cz"
     }
 }

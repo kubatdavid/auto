@@ -8,6 +8,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import cz.kubat.auto.data.DriveTile
+import cz.kubat.auto.data.TileSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -91,36 +102,59 @@ val SENSOR_BY_KEY = SENSORS.associateBy { it.key }
 @Composable
 fun SensorsScreen(live: Live) {
     val settings = App.instance.settings
-    var selected by remember { mutableStateOf(settings.driveSensors) }
+    var tiles by remember { mutableStateOf(settings.driveTiles.filter { it.key in SENSOR_BY_KEY }) }
+    fun save(t: List<DriveTile>) { tiles = t; settings.driveTiles = t }
 
     LazyColumn(Modifier.fillMaxSize().background(Palette.bg).padding(horizontal = 12.dp)) {
-        item {
-            Text(
-                "Switch on what the Drive tab shows (in this order). Values update while connected.",
-                color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 10.dp),
-            )
-        }
-        items(SENSORS, key = { it.key }) { s ->
-            val v = s.value(live)
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 3.dp).background(Palette.panel, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(s.label, color = Palette.text, fontSize = 15.sp)
-                    Text(s.unit, color = Palette.muted, fontSize = 12.sp)
+        item { Header("On the Drive screen — ▲▼ order, S/M/L size (third / half / full width)") }
+        itemsIndexed(tiles, key = { _, t -> "on-" + t.key }) { i, t ->
+            val s = SENSOR_BY_KEY.getValue(t.key)
+            SensorRow(s, live) {
+                IconButton(enabled = i > 0, onClick = { save(tiles.toMutableList().apply { add(i - 1, removeAt(i)) }) }) {
+                    Icon(Icons.Filled.KeyboardArrowUp, "Move up", tint = if (i > 0) Palette.text else Palette.line)
                 }
-                Text(
-                    v?.let(s.format) ?: "–", color = v?.let(s.color) ?: Palette.muted,
-                    fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 12.dp),
-                )
-                Switch(checked = s.key in selected, onCheckedChange = { on ->
-                    // keep catalogue order so the Drive layout is stable
-                    selected = SENSORS.map { it.key }.filter { k -> if (k == s.key) on else k in selected }
-                    settings.driveSensors = selected
-                })
+                IconButton(enabled = i < tiles.size - 1, onClick = { save(tiles.toMutableList().apply { add(i + 1, removeAt(i)) }) }) {
+                    Icon(Icons.Filled.KeyboardArrowDown, "Move down", tint = if (i < tiles.size - 1) Palette.text else Palette.line)
+                }
+                OutlinedButton(
+                    onClick = {
+                        val next = TileSize.entries[(t.size.ordinal + 1) % TileSize.entries.size]
+                        save(tiles.map { if (it.key == t.key) it.copy(size = next) else it })
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp), modifier = Modifier.width(48.dp),
+                ) { Text(t.size.name, color = Palette.text) }
+                Switch(checked = true, onCheckedChange = { save(tiles.filter { it.key != t.key }) })
             }
         }
+        item { Header("Available") }
+        items(SENSORS.filter { s -> tiles.none { it.key == s.key } }, key = { "off-" + it.key }) { s ->
+            SensorRow(s, live) {
+                Switch(checked = false, onCheckedChange = { save(tiles + DriveTile(s.key, TileSize.S)) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun Header(text: String) {
+    Text(text, color = Palette.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+}
+
+@Composable
+private fun SensorRow(s: Sensor, live: Live, controls: @Composable () -> Unit) {
+    val v = s.value(live)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 3.dp).background(Palette.panel, RoundedCornerShape(10.dp))
+            .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(s.label, color = Palette.text, fontSize = 15.sp, maxLines = 1)
+            Text(
+                (v?.let(s.format) ?: "–") + if (s.unit.isNotEmpty()) " " + s.unit else "",
+                color = v?.let(s.color) ?: Palette.muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            )
+        }
+        controls()
     }
 }

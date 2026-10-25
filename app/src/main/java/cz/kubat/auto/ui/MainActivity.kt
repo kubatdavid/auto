@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cz.kubat.auto.App
@@ -76,10 +77,12 @@ class MainActivity : ComponentActivity() {
                     else window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 }
 
+                // split-screen next to Waze: no menu, just the Drive tiles
+                val compact = LocalConfiguration.current.screenHeightDp < 520
                 Scaffold(
                     containerColor = Palette.bg,
                     bottomBar = {
-                        NavigationBar(containerColor = Palette.panel) {
+                        if (!compact) NavigationBar(containerColor = Palette.panel) {
                             NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Filled.Home, null) }, label = { Text("Drive") })
                             NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Filled.DateRange, null) }, label = { Text("Trips") })
                             NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Filled.Build, null) }, label = { Text("Sensors") })
@@ -88,7 +91,7 @@ class MainActivity : ComponentActivity() {
                     },
                 ) { padding ->
                     Box(Modifier.fillMaxSize().padding(padding)) {
-                        when (tab) {
+                        when (if (compact) 0 else tab) {
                             0 -> DriveScreen(
                                 live,
                                 onStart = {
