@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS sample (
   o2_down     FLOAT     NULL,
   volts       FLOAT     NULL,
   fuel_lph    FLOAT     NULL,
+  lambda      FLOAT     NULL,                        -- front wideband O2 (PID 0134)
   PRIMARY KEY (trip_uuid, seq)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

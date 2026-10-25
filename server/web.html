@@ -107,6 +107,7 @@
         <div class="panel"><h2>Health check</h2><div id="h-health"></div></div>
         <div class="panel"><h2>What to improve</h2><div id="h-tips"></div></div>
       </div>
+      <div class="panel"><h2>Fuel trim map (warm engine, closed loop)</h2><div id="trimmap"></div></div>
       <div class="chart"><div class="legend"><span>Consumption by speed — L/100 km (distance in each band below)</span></div><canvas class="bands" id="h-bands"></canvas></div>
       <div class="chart"><div class="legend"><span><i style="background:var(--s-speed)"></i>Speed km/h</span><span><i style="background:var(--s-rpm)"></i>RPM ÷ 50</span></div><canvas class="c" id="h-drive"></canvas></div>
       <div class="chart"><div class="legend"><span><i style="background:var(--s-fuel)"></i>Fuel flow L/h</span></div><canvas class="c" id="h-fuel"></canvas></div>
@@ -464,6 +465,49 @@ function renderMap(rows) {
   map.invalidateSize(); map.fitBounds(L.latLngBounds(pts), { padding: [20, 20] });
 }
 
+// Total fuel trim (STFT+LTFT) by rpm × load, plus airflow sanity check (volumetric efficiency from MAF).
+function trimMap(rows) {
+  const RPM = [["idle", r => (r.speed || 0) < 1 && r.rpm < 1000], ["<1500", r => r.rpm < 1500], ["1500–2000", r => r.rpm < 2000],
+    ["2000–2500", r => r.rpm < 2500], ["2500–3000", r => r.rpm < 3000], ["3000–4000", r => r.rpm < 4000], ["4000+", r => true]];
+  const LOAD = [["<30 %", l => l < 30], ["30–50 %", l => l < 50], ["50–70 %", l => l < 70], ["70+ %", l => true]];
+  const cells = {}, lam = [];
+  let lastCut = -1e9;
+  for (const r of rows) {
+    if (r.fuel_lph === 0) lastCut = r.elapsed;
+    if (r.fuelsys !== 2 || r.stft == null || r.ltft == null || (r.coolant ?? 0) < 80 || !(r.rpm > 300)) continue;
+    if (r.elapsed - lastCut < 8) continue;               // trims jump right after overrun fuel cut-off
+    const ri = RPM.findIndex(([, f]) => f(r)), li = r.rpm < 1000 && (r.speed || 0) < 1 ? 0 : LOAD.findIndex(([, f]) => f(r.load ?? 0));
+    (cells[ri + "," + li] ??= []).push(r.stft + r.ltft);
+    if (r.lambda != null) lam.push(r.lambda);
+  }
+  const color = v => Math.abs(v) <= 10 ? "var(--ok)" : Math.abs(v) <= 15 ? "var(--warm)" : "var(--hot)";
+  let h = '<table style="border-collapse:collapse;width:100%;font-size:13px"><tr><th style="text-align:left;color:var(--muted);font-weight:400">rpm \\ load</th>'
+    + LOAD.map(([n]) => `<th style="color:var(--muted);font-weight:400">${n}</th>`).join("") + "</tr>";
+  RPM.forEach(([rn], ri) => {
+    const row = LOAD.map((_, li) => {
+      const v = cells[ri + "," + li];
+      if (!v || v.length < 5) return '<td style="text-align:center;color:var(--line)">·</td>';
+      const m = mean(v);
+      return `<td style="text-align:center;padding:4px"><b style="color:${color(m)}">${signed(m)} %</b><div style="font-size:11px;color:var(--muted)">n=${v.length}</div></td>`;
+    });
+    if (row.some(c => c.includes("<b"))) h += `<tr><td style="color:var(--muted)">${rn}</td>${row.join("")}</tr>`;
+  });
+  h += "</table>";
+  // airflow check: volumetric efficiency at high load (ALT 1984 cc)
+  const ve = rows.filter(r => r.maf && r.rpm > 3000 && (r.throttle ?? 0) > 80 && r.iat != null).map(r => {
+    const rho = 101325 / (287.05 * (r.iat + 273.15)) * 1000;   // g/m³
+    return { ve: r.maf / (r.rpm / 120 * 0.001984 * rho), rpm: r.rpm, maf: r.maf };
+  });
+  const notes = [];
+  if (lam.length >= 10) notes.push(`Front O2 lambda in closed loop: ${mean(lam).toFixed(3)} (should average ≈ 1.000).`);
+  if (ve.length) {
+    const best = ve.reduce((a, b) => b.ve > a.ve ? b : a);
+    notes.push(`Full-throttle airflow: ${best.maf.toFixed(0)} g/s at ${best.rpm.toFixed(0)} rpm → volumetric efficiency ${(best.ve * 100).toFixed(0)} % `
+      + (best.ve < 0.75 ? "— LOW: airflow sensor likely under-reading (or intake restriction)." : "— plausible (≈ 80–95 % expected)."));
+  } else notes.push("No full-throttle data in this trip — do one pull in 3rd gear to check the airflow sensor.");
+  return h + notes.map(n => `<div class="sub" style="margin-top:6px">${n}</div>`).join("");
+}
+
 function renderHistory() {
   if (!hist) return;
   const { name, rows, codes } = hist, s = analyze(rows, codes);
@@ -478,6 +522,7 @@ function renderHistory() {
   $("h-cool").innerHTML = s.cMax == null ? "–" : unit(`${s.cStart}→${s.cEnd}`, "°C"); $("h-coolsub").textContent = s.cMax == null ? "" : `max ${s.cMax} °C`;
   $("h-eco").textContent = s.eco ?? "–";
   renderFindings("h-health", s); renderTips("h-tips", s);
+  $("trimmap").innerHTML = trimMap(rows);
   drawBands($("h-bands"), s); drawCharts(rows, "h");
   drawReport(name, rows, codes, s);
 }

@@ -80,6 +80,8 @@ val SENSORS: List<Sensor> = listOf(
     }, signed, color = { if (kotlin.math.abs(it) > 15) Palette.warm else Palette.text }),
     Sensor("timing", "Ignition timing", "° BTDC", obd("timing"), one),
     Sensor("o2_down", "O2 after catalyst", "V", obd("o2_down"), { "%.2f".format(it) }),
+    Sensor("lambda", "Mixture (lambda, front O2)", "λ", obd("lambda"), { "%.3f".format(it) },
+        color = { if (it > 1.05 || it < 0.95) Palette.warm else Palette.text }),
     Sensor("volts", "Battery", "V", obd("volts"), one, color = { if (it < 12.2 || it > 14.8) Palette.warm else Palette.text }),
     Sensor("fuelsys", "Fuel system", "", obd("fuelsys"), {
         when (it.toInt()) {

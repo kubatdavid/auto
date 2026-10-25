@@ -10,7 +10,7 @@ const SAMPLE_COLUMNS = [
     'alt' => 'alt', 'accuracy' => 'accuracy', 'speed' => 'speed', 'rpm' => 'rpm', 'maf' => 'maf',
     'throttle' => 'throttle', 'coolant' => 'coolant', 'load' => 'engine_load', 'stft' => 'stft',
     'ltft' => 'ltft', 'fuelsys' => 'fuelsys', 'iat' => 'iat', 'timing' => 'timing',
-    'o2_down' => 'o2_down', 'volts' => 'volts', 'fuel_lph' => 'fuel_lph',
+    'o2_down' => 'o2_down', 'volts' => 'volts', 'fuel_lph' => 'fuel_lph', 'lambda' => 'lambda',
 ];
 
 $cfg = require __DIR__ . '/../config.php';
