@@ -92,6 +92,14 @@ val SENSORS: List<Sensor> = listOf(
             else -> "–"
         }
     }),
+    Sensor("sec_air", "Secondary air (cold start)", "", obd("sec_air"), {
+        when (it.toInt()) {
+            1 -> "Upstream"
+            2 -> "Downstream"
+            4 -> "Off"
+            else -> "–"
+        }
+    }),
     Sensor("dist_mil", "Driven with check-engine light", "km", obd("dist_mil")),
     Sensor("gps_speed", "GPS speed", "km/h", { it.gpsSpeed }),
     Sensor("alt", "Altitude", "m", { it.altitude }),

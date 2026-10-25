@@ -19,6 +19,7 @@ object Pids {
         "0110" to Pid("maf") { (u(it, 0) * 256 + u(it, 1)) / 100.0 },
         "0111" to Pid("throttle") { u(it, 0) * 100.0 / 255 },
         "0115" to Pid("o2_down") { u(it, 0) / 200.0 }, // O2 bank 1 sensor 2 (after catalyst), volts
+        "0112" to Pid("sec_air") { u(it, 0).toDouble() }, // commanded secondary air: 1 upstream, 2 downstream, 4 outside/off
         "0134" to Pid("lambda") { (u(it, 0) * 256 + u(it, 1)) * 2.0 / 65536 }, // front wideband O2: measured air/fuel ratio vs ideal
         "0121" to Pid("dist_mil") { (u(it, 0) * 256 + u(it, 1)).toDouble() }, // km driven with check-engine light on
     )
@@ -27,7 +28,7 @@ object Pids {
     val FAST = listOf("010D", "010C", "0110", "0111")
 
     /** Rotated, [SLOW_PER_CYCLE] per cycle. */
-    val SLOW = listOf("0105", "0104", "0106", "0107", "0103", "010F", "010E", "0115", "0134", "0121")
+    val SLOW = listOf("0105", "0104", "0106", "0107", "0103", "010F", "010E", "0115", "0134", "0121", "0112")
     const val SLOW_PER_CYCLE = 2
 
     private const val AFR = 14.7 // stoichiometric, petrol
