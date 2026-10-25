@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Audi A4 – diagnostika</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #15181d; --muted: #5f6875; --line: #e3e6eb;
+    --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --accent: #c2410c; --blue: #2563eb; --grey: #9aa3af;
+    --okbg: #ecfdf3; --warnbg: #fff7ed; --badbg: #fef2f2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1116; --card: #171b22; --text: #e8ebf0; --muted: #8a93a3; --line: #2a303a;
+      --ok: #3ccf7a; --warn: #f2b134; --bad: #ff6b6b; --accent: #ff8a3d; --blue: #6ea8ff; --grey: #5f6875;
+      --okbg: #12261b; --warnbg: #2a2010; --badbg: #2c1414; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 2px; }
+  h2 { font-size: 18px; margin: 28px 0 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .verdict { border-left: 5px solid var(--bad); background: var(--badbg); }
+  .verdict b { color: var(--bad); }
+  ul { margin: 6px 0 0; padding-left: 20px; }
+  li { margin: 3px 0; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  .ok { color: var(--ok); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; } .bad { color: var(--bad); font-weight: 700; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+  svg { width: 100%; height: auto; display: block; }
+  .drive h3 { font-size: 15px; margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Audi A4 (8E) 2.0 benzín – chudá směs</h1>
+  <div class="muted small">Motor ALT, 96 kW · data z OBD (ELM327, pouze čtení) · aktualizováno <span id="updated">…</span></div>
+
+  <h2>Shrnutí</h2>
+  <div class="card verdict">
+    <p style="margin-top:0"><b>Podezření na přisávání falešného vzduchu za snímačem MAF.</b>
+      Celková korekce paliva na volnoběh stoupla během týdne po výměně termostatu z <b>+3 %</b> na <b>+28 až +37 %</b>.
+      S vyššími otáčkami korekce klesá, což odpovídá netěsnosti v sání (podtlaku), ne vadě snímače.</p>
+    <div><b style="color:var(--text)">Prosím o kouřový test sání</b>, hlavně:</div>
+    <ul>
+      <li>hadice a spony v okolí termostatu (manipulovalo se s nimi při výměně)</li>
+      <li>odvětrání klikové skříně – PCV ventil a hadice</li>
+      <li>podtlakové hadice podél sacího potrubí, hadice k posilovači brzd</li>
+      <li>těsnění sacího potrubí</li>
+    </ul>
+    <p class="small muted" style="margin-bottom:0">Chybové kódy: žádné, kontrolka nesvítí, všechny testy připravenosti (readiness) dokončené.
+      Mírně chudá směs při zátěži (cca +12 až +15 %) byla už před tím – řešit až po odstranění netěsnosti (MAF / tlak paliva).</p>
+  </div>
+
+  <h2>Test na místě 25. 10. (zahřátý motor, neutrál)</h2>
+  <div class="card scroll">
+    <table>
+      <tr><th></th><th>Volnoběh 750 ot/min</th><th>2600 ot/min</th></tr>
+      <tr><td>Krátkodobá korekce (STFT)</td><td class="bad">+14 %</td><td>−3 %</td></tr>
+      <tr><td>Dlouhodobá korekce (LTFT)</td><td class="bad">+23 %</td><td class="bad">+22 %</td></tr>
+      <tr><td>Celková korekce</td><td class="bad">+37 %</td><td class="warn">+19 %</td></tr>
+      <tr><td>Průtok vzduchu (MAF)</td><td>3,3 g/s</td><td>9,4 g/s</td></tr>
+      <tr><td>Lambda (přední sonda)</td><td>1,00</td><td>1,00</td></tr>
+    </table>
+    <p class="small muted" style="margin-bottom:0">Pro srovnání 19. 10.: volnoběh STFT −11 %, LTFT +14 %, celkem +3 %, MAF 3,9 g/s.</p>
+  </div>
+
+  <h2>Jízdy od 19. 10.</h2>
+  <div class="card scroll"><table id="trips"><tr><td class="muted">Načítám…</td></tr></table></div>
+  <p class="small muted">Celková korekce = STFT + LTFT, jen zahřátý motor v uzavřené smyčce. Normální rozsah je ±10 %.
+    „Jízda“ = 1500–2500 ot/min za jízdy.</p>
+
+  <h2>Vývoj korekce paliva</h2>
+  <div class="card">
+    <div class="legend"><span><i style="background:var(--bad)"></i>Volnoběh</span><span><i style="background:var(--blue)"></i>Jízda 1500–2500 ot/min</span><span><i style="background:var(--warn)"></i>Dlouhodobá (LTFT)</span><span>zelené pásmo = normální ±10 %</span></div>
+    <svg id="trend" viewBox="0 0 800 260"></svg>
+  </div>
+
+  <h2>Průběh jednotlivých jízd</h2>
+  <div id="drives"></div>
+
+  <p class="small muted" style="margin-top:32px">Měřeno vlastní aplikací přes OBD-II, adaptér ELM327, pouze čtení (nic se v řídicí jednotce nemazalo ani neměnilo).</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const pct = v => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1).replace(".", ",") + " %";
+const cls = v => v == null ? "" : Math.abs(v) <= 10 ? "ok" : Math.abs(v) <= 20 ? "warn" : "bad";
+const num = (v, d = 1) => v == null ? "–" : v.toFixed(d).replace(".", ",");
+const date = t => new Date(t * 1000).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+const mins = s => Math.round(s / 60) + " min";
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  parent.appendChild(e); return e;
+}
+
+function axes(svg, W, H, L, B, yMin, yMax, step, unit) {
+  const Y = v => 10 + (yMax - v) / (yMax - yMin) * (H - 10 - B);
+  el("rect", { x: L, y: Y(10), width: W - L - 10, height: Y(-10) - Y(10), fill: css("--okbg") }, svg);
+  for (let v = yMin; v <= yMax; v += step) {
+    el("line", { x1: L, x2: W - 10, y1: Y(v), y2: Y(v), stroke: css("--line"), "stroke-width": v === 0 ? 1.5 : 1 }, svg);
+    el("text", { x: L - 6, y: Y(v) + 4, "text-anchor": "end", "font-size": 12, fill: css("--muted") }, svg, (v > 0 ? "+" : "") + v + unit);
+  }
+  return Y;
+}
+
+function trend(trips) {
+  const svg = $("trend"); svg.innerHTML = "";
+  const W = 800, H = 260, L = 52, B = 34, ok = trips.filter(t => t.idle_trim != null || t.ltft != null);
+  if (!ok.length) return;
+  const Y = axes(svg, W, H, L, B, -10, 40, 10, " %");
+  const X = i => ok.length === 1 ? (L + W) / 2 : L + 30 + i * (W - L - 70) / (ok.length - 1);
+  for (const [key, color] of [["ltft", css("--warn")], ["cruise_trim", css("--blue")], ["idle_trim", css("--bad")]]) {
+    const pts = ok.map((t, i) => t[key] == null ? null : [X(i), Y(t[key])]).filter(Boolean);
+    if (pts.length > 1) el("polyline", { points: pts.map(p => p.join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 3 }, svg);
+    for (const [x, y] of pts) el("circle", { cx: x, cy: y, r: 5, fill: color }, svg);
+  }
+  ok.forEach((t, i) => el("text", { x: X(i), y: H - 10, "text-anchor": "middle", "font-size": 12, fill: css("--muted") }, svg, date(t.started_at)));
+}
+
+function driveChart(t) {
+  const W = 800, H = 200, L = 52, B = 26, svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const Y = axes(svg, W, H, L, B, -20, 50, 10, " %");
+  const tMax = Math.max(1, ...t.series.map(p => p[0]));
+  const X = m => L + m / tMax * (W - L - 10);
+  // engine speed as faint background (scaled 0–4000 rpm onto the chart height)
+  const R = rpm => 10 + (1 - Math.min(rpm, 4000) / 4000) * (H - 10 - B);
+  el("polyline", { points: t.series.map(p => `${X(p[0])},${R(p[2])}`).join(" "), fill: "none", stroke: css("--grey"), "stroke-width": 1.2, opacity: .7 }, svg);
+  // driving = orange line, idle (standing, < 1000 rpm) = red dots
+  const idle = p => p[3] < 1 && p[2] < 1000;
+  let d = "", pen = false, last = -1;
+  for (const p of t.series) {
+    if (idle(p)) { pen = false; continue; }
+    const gap = p[0] - last > 1; last = p[0];
+    d += (pen && !gap ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(Math.max(-20, Math.min(50, p[1]))).toFixed(1); pen = true;
+  }
+  el("path", { d, fill: "none", stroke: css("--accent"), "stroke-width": 1.6, opacity: .75 }, svg);
+  for (const p of t.series.filter(idle)) el("circle", { cx: X(p[0]), cy: Y(Math.max(-20, Math.min(50, p[1]))), r: 3.2, fill: css("--bad") }, svg);
+  for (let m = 0; m <= tMax; m += tMax > 40 ? 10 : 5) el("text", { x: X(m), y: H - 6, "text-anchor": "middle", "font-size": 12, fill: css("--muted") }, svg, m + " min");
+  return svg;
+}
+
+function render(data) {
+  $("updated").textContent = new Date(data.generated * 1000).toLocaleString("cs-CZ");
+  const trips = data.trips;
+  const rows = trips.map(t => `<tr>
+    <td>${date(t.started_at)}</td><td>${num(t.distance_km)} km</td><td>${mins(t.duration_s)}</td>
+    <td class="${cls(t.idle_trim)}">${pct(t.idle_trim)}</td><td class="${cls(t.cruise_trim)}">${pct(t.cruise_trim)}</td>
+    <td class="${cls(t.ltft)}">${pct(t.ltft)}</td><td>${t.lambda == null ? "–" : num(t.lambda, 3)}</td>
+    <td>${t.coolant_max == null ? "–" : t.coolant_max + " °C"}</td><td>${t.l_per_100km == null ? "–" : num(t.l_per_100km) + " l"}</td>
+    <td>${t.stored.length || t.pending.length ? [...t.stored, ...t.pending.map(c => c + "?")].join(", ") : "žádné"}</td></tr>`).join("");
+  $("trips").innerHTML = `<tr><th>Jízda</th><th>Vzdál.</th><th>Doba</th><th>Volnoběh</th><th>Jízda</th><th>LTFT</th><th>Lambda</th><th>Max. teplota</th><th>Spotřeba /100 km</th><th>Chyby</th></tr>` + rows;
+  trend(trips);
+  const box = $("drives"); box.innerHTML = "";
+  for (const t of [...trips].reverse()) {
+    if (!t.series.length) continue;
+    const c = document.createElement("div"); c.className = "card drive";
+    c.innerHTML = `<h3>${date(t.started_at)} · ${num(t.distance_km)} km · ${mins(t.duration_s)}</h3>
+      <div class="legend"><span><i style="background:var(--bad);height:7px;width:7px;border-radius:50%"></i>Korekce na volnoběh (${pct(t.idle_trim)})</span><span><i style="background:var(--accent)"></i>Korekce za jízdy</span><span><i style="background:var(--grey)"></i>Otáčky (0–4000)</span></div>`;
+    c.appendChild(driveChart(t)); box.appendChild(c);
+  }
+}
+
+fetch(location.pathname.replace(/\/$/, "") + "/data").then(r => r.json()).then(render)
+  .catch(e => $("trips").innerHTML = `<tr><td>Data se nepodařilo načíst: ${e.message}</td></tr>`);
+</script>
+</body>
+</html>

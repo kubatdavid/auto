@@ -261,10 +261,72 @@ function web(array $cfg, string $path, string $method): never
     out(404, ['error' => 'not found']);
 }
 
+// ---------------------------------------------------------------- mechanic report (public, secret link)
+// /r/<token> = page, /r/<token>/data = JSON. No GPS data is exposed.
+
+const REPORT_SINCE = 1792360800; // 2026-10-19 00:00 (Europe/Prague): first drive after the thermostat repair
+
+function report_trip(PDO $db, array $t): array
+{
+    $q = $db->prepare('SELECT t, speed, rpm, stft, ltft, fuelsys, coolant, fuel_lph, lambda, maf FROM sample WHERE trip_uuid = ? ORDER BY seq');
+    $q->execute([$t['uuid']]);
+    $idle = $cruise = $ltft = $lam = $series = [];
+    $lastCut = -1e9;
+    $t0 = null;
+    $n = 0;
+    while ($r = $q->fetch()) {
+        $tt = (float)$r['t'];
+        $t0 ??= $tt;
+        if ($r['fuel_lph'] !== null && (float)$r['fuel_lph'] == 0.0) $lastCut = $tt;
+        $warm = $r['coolant'] !== null && (int)$r['coolant'] >= 80;
+        $cl = (int)$r['fuelsys'] === 2 && $r['stft'] !== null && $r['ltft'] !== null;
+        if (!$warm || !$cl || $tt - $lastCut < 8) continue;
+        $total = (float)$r['stft'] + (float)$r['ltft'];
+        $rpm = (int)$r['rpm'];
+        $v = (int)$r['speed'];
+        if ($v < 1 && $rpm > 500 && $rpm < 1000) $idle[] = $total;
+        elseif ($v > 0 && $rpm >= 1500 && $rpm < 2500) $cruise[] = $total;
+        $ltft[] = (float)$r['ltft'];
+        if ($r['lambda'] !== null) $lam[] = (float)$r['lambda'];
+        if ($n++ % 5 === 0) $series[] = [round(($tt - $t0) / 60, 2), round($total, 1), $rpm, $v];
+    }
+    $avg = fn(array $a) => $a ? round(array_sum($a) / count($a), 1) : null;
+    $d = $db->prepare('SELECT mil, stored, pending FROM dtc_snapshot WHERE trip_uuid = ? ORDER BY t DESC LIMIT 1');
+    $d->execute([$t['uuid']]);
+    $codes = $d->fetch() ?: null;
+    $sum = $t['summary'] ? json_decode($t['summary'], true) : [];
+    return [
+        'started_at' => (float)$t['started_at'], 'duration_s' => (float)$t['duration_s'], 'distance_km' => (float)$t['distance_km'],
+        'l_per_100km' => $sum['l_per_100km'] ?? null, 'coolant_max' => $sum['coolant_max'] ?? null,
+        'idle_trim' => $avg($idle), 'idle_n' => count($idle), 'cruise_trim' => $avg($cruise), 'cruise_n' => count($cruise),
+        'ltft' => $avg($ltft), 'lambda' => $lam ? round(array_sum($lam) / count($lam), 3) : null,
+        'mil' => $codes ? (bool)$codes['mil'] : null,
+        'stored' => $codes ? json_decode($codes['stored'] ?? '[]', true) : [], 'pending' => $codes ? json_decode($codes['pending'] ?? '[]', true) : [],
+        'series' => $series,
+    ];
+}
+
+function report(array $cfg, string $token, bool $data): never
+{
+    if (!in_array($token, $cfg['report_tokens'] ?? [], true)) out(404, ['error' => 'not found']);
+    header('X-Robots-Tag: noindex, nofollow');
+    if (!$data) {
+        header('Content-Type: text/html; charset=utf-8');
+        readfile(__DIR__ . '/../report.html');
+        exit;
+    }
+    $db = db($cfg);
+    $q = $db->prepare('SELECT uuid, started_at, duration_s, distance_km, summary FROM trip
+                       WHERE started_at >= ? AND distance_km >= 1 ORDER BY started_at');
+    $q->execute([REPORT_SINCE]);
+    out(200, ['generated' => time(), 'trips' => array_map(fn($t) => report_trip($db, $t), $q->fetchAll())]);
+}
+
 // ---------------------------------------------------------------- routing
 $path = rtrim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/', '/');
 $method = $_SERVER['REQUEST_METHOD'];
 
+if (preg_match('#^/r/([A-Za-z0-9_-]{20,64})(/data)?$#', $path, $m)) report($cfg, $m[1], isset($m[2]));
 $host = strtolower(explode(':', $_SERVER['HTTP_HOST'] ?? '')[0]);
 if ($host === 'auto.force.local' && !str_starts_with($path, '/api/v1/')) web($cfg, $path, $method);
 if (!str_starts_with($path, '/api/v1/')) out(404, ['error' => 'not found']);
