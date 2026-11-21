@@ -42,26 +42,39 @@
 </head>
 <body>
 <main>
-  <h1>Audi A4 (8E) 2.0 benzín – chudá směs</h1>
+  <h1>Audi A4 (8E) 2.0 benzín – P0171, chudá směs</h1>
   <div class="muted small">Motor ALT, 96 kW · data z OBD (ELM327, pouze čtení) · aktualizováno <span id="updated">…</span></div>
 
-  <h2>Shrnutí</h2>
+  <h2>Problém</h2>
   <div class="card verdict">
-    <p style="margin-top:0"><b>Podezření na přisávání falešného vzduchu za snímačem MAF.</b>
-      Celková korekce paliva na volnoběh stoupla během týdne po výměně termostatu z <b>+3 %</b> na <b>+28 až +37 %</b>.
-      S vyššími otáčkami korekce klesá, což odpovídá netěsnosti v sání (podtlaku), ne vadě snímače.</p>
-    <p style="margin:0 0 8px">12. 11. test s hadičkou pod sacím potrubím (u odvětrání klikové skříně) odpojenou vs. připojenou:
-      <b>žádný podstatný rozdíl</b>, korekce na volnoběh stále cca +25 %. Netěsnost je tedy jinde.</p>
-    <div><b style="color:var(--text)">Prosím o kouřový test sání</b>, hlavně:</div>
-    <ul>
-      <li>hadice a spony v okolí termostatu (manipulovalo se s nimi při výměně)</li>
-      <li>odvětrání klikové skříně – regulační ventil (membrána) a hadice</li>
-      <li>podtlakové hadice podél sacího potrubí, hadice k posilovači brzd</li>
-      <li>těsnění sacího potrubí</li>
+    <p style="margin:0"><b>Uložený kód P0171 (systém příliš chudý), kontrolka motoru svítí od 21. 11.</b>
+      Řídicí jednotka dlouhodobě přidává palivo, nejvíc na volnoběh. Motor jinak jede normálně, teplota v pořádku.</p>
+    <p class="small muted" style="margin:8px 0 0">Freeze frame: 1400 ot/min, 37 km/h, zatížení 14 %, chladicí kapalina 95 °C.</p>
+  </div>
+
+  <h2>Historie</h2>
+  <div class="card">
+    <ul style="margin:0">
+      <li><b>11. 10.</b> – kód P0116 (teplota chladicí kapaliny), motor se nezahříval → <b>vyměněn termostat</b>, od té doby teplota 95–105 °C</li>
+      <li><b>19. 10.</b> – celková korekce paliva na volnoběh +3 % (v normě), při jízdě +11 až +15 %</li>
+      <li><b>25. 10.</b> – korekce na volnoběh náhle +28 až +37 %, dlouhodobá korekce z +15 % na +23 %</li>
+      <li><b>26. 10. – 2. 11.</b> – občas čekající kód P0171, sám mizí</li>
+      <li><b>předchozí servis</b> – podle sdělení kouřový test bez nálezu; jedna hadička pod sacím potrubím byla odpojená</li>
+      <li><b>12. 11.</b> – srovnání té hadičky odpojené / připojené: bez podstatného rozdílu (volnoběh cca +25 % v obou případech)</li>
+      <li><b>21. 11.</b> – P0171 uložen, kontrolka svítí</li>
     </ul>
-    <p class="small muted" style="margin-bottom:0"><b style="color:var(--bad)">21. 11. uložen kód P0171 (směs příliš chudá), kontrolka motoru svítí.</b>
-      Freeze frame: 1400 ot/min, 37 km/h, zatížení 14 %, chladicí kapalina 95 °C.
-      Mírně chudá směs při zátěži (cca +12 až +15 %) byla už před tím – řešit až po odstranění netěsnosti (MAF / tlak paliva).</p>
+  </div>
+
+  <h2>Co z dat vidím</h2>
+  <div class="card">
+    <ul style="margin:0">
+      <li>Korekce je nejvyšší na volnoběh a s otáčkami klesá (viz test níže) – ale ani při jízdě se nevrací do normy.</li>
+      <li>Lambda na volnoběh i v 2600 ot/min drží 1,00 – regulace funguje, jen musí hodně přidávat.</li>
+      <li>MAF na volnoběh klesl z cca 3,9 na 3,3 g/s, korekce přitom vzrostla.</li>
+      <li>Testy připravenosti (readiness) dokončené, jiné kódy nejsou.</li>
+    </ul>
+    <p class="small muted" style="margin:10px 0 0">Nejsem mechanik – data posílám pro informaci, diagnózu nechám na vás.
+      Klidně řeknu, co ještě změřit; aplikace loguje otáčky, MAF, korekce, lambdu, teploty a kódy z každé jízdy.</p>
   </div>
 
   <h2>Test na místě 25. 10. (zahřátý motor, neutrál)</h2>
